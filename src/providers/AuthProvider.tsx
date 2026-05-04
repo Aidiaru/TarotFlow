@@ -15,7 +15,6 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  signInAnonymously: () => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
 }
 
@@ -26,7 +25,6 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
   signOut: async () => {},
-  signInAnonymously: async () => ({ error: null }),
   signInWithGoogle: async () => ({ error: null }),
 });
 
@@ -65,11 +63,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-  };
-
-  const signInAnonymously = async () => {
-    const { error } = await supabase.auth.signInAnonymously();
-    return { error: error as Error | null };
   };
 
   const signInWithGoogle = async () => {
@@ -131,7 +124,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         signIn,
         signUp,
         signOut,
-        signInAnonymously,
         signInWithGoogle,
       }}
     >
