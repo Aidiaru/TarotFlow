@@ -177,7 +177,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const { session_id, question, message_history } = await req.json();
-    const cards = drawCards(5);
+    
+    let isConversational = false;
+    if (question && question.trim().length > 0) {
+      const intentPrompt = [{ role: "user", parts: [{ text: `Message: "${question}"\nIs this a simple greeting, thank you, confirmation, or small talk that DOES NOT require a tarot reading? Answer ONLY with YES or NO.` }] }];
+      const intentResponse = await callGemini(intentPrompt as any, "You are an intent classifier. Answer ONLY YES or NO.");
+      isConversational = intentResponse.trim().toUpperCase().includes("YES");
+    }
+    
+    const cards = isConversational ? [] : drawCards(5);
 
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -208,9 +216,9 @@ Deno.serve(async (req: Request) => {
     } catch (e) { console.log("=== RAG ERROR ===\n", e); }
 
     // Build card description
-    const cardDesc = cards
-      .map((c) => `${c.position}. ${c.name_tr} (${c.name})${c.is_reversed ? " — Ters" : ""}`)
-      .join("\n");
+    const cardDesc = cards.length > 0
+      ? cards.map((c) => `${c.position}. ${c.name_tr} (${c.name})${c.is_reversed ? " — Ters" : ""}`).join("\n")
+      : "";
 
     // Hidden context
     let hiddenContext = "";
@@ -224,7 +232,14 @@ Deno.serve(async (req: Request) => {
       hiddenContext += `\n[PAST INSIGHTS]\n${relevantInsights.join("\n")}\n`;
     }
 
-    const systemInstruction = `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst using the Rider-Waite tarot tradition.
+    const systemInstruction = isConversational
+      ? `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst. 
+CRITICAL RULES:
+1. ALWAYS respond in the exact same language that the user used.
+2. The user is just chatting or greeting you. Respond conversationally, keeping your wise and empathetic tone.
+3. Do not give a reading. Just warmly answer their small talk. Keep it very short (1-2 sentences).
+${hiddenContext ? "\n" + hiddenContext : ""}`
+      : `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst using the Rider-Waite tarot tradition.
 CRITICAL RULES:
 1. ALWAYS respond in the exact same language that the user used in their last message. If they write in Turkish, respond entirely in Turkish.
 2. NEVER use cheap fortune-teller cliches (e.g., 'honey', 'fate is smiling at you', 'three days', 'fortune').
@@ -247,7 +262,9 @@ ${hiddenContext ? "\n" + hiddenContext : ""}`;
       });
     }
 
-    const currentTurnText = `Soru / Question: ${question || "Genel bir okuma istiyorum"}\n\nÇekilen Kartlar / Drawn Cards:\n${cardDesc}\n\nPlease interpret this based on your system instructions.`;
+    const currentTurnText = isConversational 
+      ? `Mesaj / Message: ${question}`
+      : `Soru / Question: ${question || "Genel bir okuma istiyorum"}\n\nÇekilen Kartlar / Drawn Cards:\n${cardDesc}\n\nPlease interpret this based on your system instructions.`;
     
     promptContents.push({
       role: "user",
@@ -258,7 +275,9 @@ ${hiddenContext ? "\n" + hiddenContext : ""}`;
     const reading = await callGemini(promptContents as any, systemInstruction);
 
     // Save
-    await serviceClient.from("card_draws").insert({ session_id, user_id: user.id, cards, question: question || null });
+    if (cards.length > 0) {
+      await serviceClient.from("card_draws").insert({ session_id, user_id: user.id, cards, question: question || null });
+    }
     const { data: savedMessage } = await serviceClient.from("messages")
       .insert({ session_id, user_id: user.id, role: "assistant", content: reading, metadata: { cards } })
       .select().single();
