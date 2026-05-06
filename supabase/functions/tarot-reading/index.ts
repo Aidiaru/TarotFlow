@@ -99,33 +99,48 @@ function drawCards(count = 5) {
   }));
 }
 
-async function callGemini(prompt: string, systemInstruction: string): Promise<string> {
+async function callGemini(prompt: any, systemInstruction: string, attempt = 1): Promise<string> {
+  const MAX_RETRIES = 3;
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemInstruction }] },
-        contents: prompt,
-        generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 4096 },
-      }),
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: prompt,
+          generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 4096 },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error(`Gemini err (Status ${response.status}):`, errBody);
+      throw new Error(`Gemini HTTP ${response.status}`);
     }
-  );
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    console.error("Gemini err:", errBody);
-    throw new Error(`Gemini ${response.status}`);
+    const data = await response.json();
+    const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    console.log("=== GEMINI API OUTPUT ===\n", textOutput, "\n=========================");
+    return textOutput;
+  } catch (error: any) {
+    const isRetryable = error.message.includes("503") || error.message.includes("429") || error.message.includes("fetch") || error.message.includes("HTTP 50");
+    if (attempt <= MAX_RETRIES && isRetryable) {
+      const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      console.log(`[Attempt ${attempt} failed] ${error.message}. Retrying in ${Math.round(delay)}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return callGemini(prompt, systemInstruction, attempt + 1);
+    }
+    if (isRetryable) {
+      throw new Error("Tarot enerjileri şu an çok yoğun, lütfen birazdan tekrar dene.");
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  console.log("=== GEMINI API OUTPUT ===\n", textOutput, "\n=========================");
-  return textOutput;
 }
 
 async function getEmbedding(text: string): Promise<number[]> {

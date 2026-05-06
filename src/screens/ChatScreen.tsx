@@ -39,6 +39,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [retryPayload, setRetryPayload] = useState<{ question: string, history: any[] } | null>(null);
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -152,6 +153,7 @@ export default function ChatScreen() {
     const userMessage = inputText.trim();
     setInputText('');
     Keyboard.dismiss();
+    setRetryPayload(null);
 
     try {
       // Auto-title on first message
@@ -173,15 +175,26 @@ export default function ChatScreen() {
         );
       }
 
-      setLoading(true);
       const messageHistory = messages.map((m) => ({
         role: m.role, content: m.content,
       }));
 
+      await fetchReading(userMessage, messageHistory);
+    } catch (error: any) {
+      Alert.alert('Hata', 'Mesaj gönderilemedi: ' + error.message);
+    }
+  };
+
+  const fetchReading = async (question: string, history: any[]) => {
+    if (!currentSession || !user) return;
+    try {
+      setLoading(true);
+      setRetryPayload(null);
+
       const response = await requestTarotReading({
         session_id: currentSession.id,
-        question: userMessage,
-        message_history: [...messageHistory, { role: 'user', content: userMessage }],
+        question: question,
+        message_history: [...history, { role: 'user', content: question }],
       });
 
       const savedAssistantMsg = await saveMessage(
@@ -191,7 +204,8 @@ export default function ChatScreen() {
       setMessages((prev) => [...prev, savedAssistantMsg]);
       scrollToBottom();
     } catch (error: any) {
-      Alert.alert('Hata', 'Mesaj gönderilemedi: ' + error.message);
+      setRetryPayload({ question, history });
+      Alert.alert('Yoğunluk', error.message || 'Bağlantı kurulamadı.');
     } finally {
       setLoading(false);
     }
@@ -448,6 +462,19 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {/* Retry Button */}
+        {retryPayload && !loading && currentSession?.status === 'active' && (
+          <View style={styles.retryRow}>
+            <Text style={styles.retryText}>Bağlantı kurulamadı.</Text>
+            <TouchableOpacity 
+              style={styles.retryButton} 
+              onPress={() => fetchReading(retryPayload.question, retryPayload.history)}
+            >
+              <Text style={styles.retryButtonText}>Tekrar Dene</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Input */}
         {currentSession?.status === 'active' && (
           <View style={styles.inputBar}>
@@ -604,6 +631,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12, gap: 8,
   },
   loadingText: { color: '#6C5CE7', fontSize: 13 },
+
+  retryRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 12, gap: 12,
+  },
+  retryText: { color: '#FF6B6B', fontSize: 13 },
+  retryButton: {
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: '#FF6B6B20', borderRadius: 16,
+    borderWidth: 1, borderColor: '#FF6B6B40',
+  },
+  retryButtonText: { color: '#FF6B6B', fontSize: 13, fontWeight: '500' },
 
   // INPUT
   inputBar: {
