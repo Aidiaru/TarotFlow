@@ -396,7 +396,7 @@ export default function ChatScreen() {
             </Text>
           </View>
           {currentSession?.status === 'active' && messages.length > 0 && (
-            <TouchableOpacity onPress={handleEndSession} style={styles.endBtn}>
+            <TouchableOpacity onPress={handleEndSession} style={styles.endBtn} disabled={loading}>
               <Text style={styles.endBtnText}>Bitir</Text>
             </TouchableOpacity>
           )}
@@ -444,7 +444,7 @@ export default function ChatScreen() {
         {loading && (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color="#6C5CE7" />
-            <Text style={styles.loadingText}>Kartlar yorumlanıyor...</Text>
+            <Text style={styles.loadingText}>Yanıt hazırlanıyor...</Text>
           </View>
         )}
 
