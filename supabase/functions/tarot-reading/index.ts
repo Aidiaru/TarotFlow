@@ -195,7 +195,7 @@ Deno.serve(async (req: Request) => {
     
     let isConversational = false;
     if (question && question.trim().length > 0) {
-      const intentPrompt = [{ role: "user", parts: [{ text: `Message: "${question}"\nIs this a simple greeting, thank you, confirmation, or small talk that DOES NOT require a tarot reading? Answer ONLY with YES or NO.` }] }];
+      const intentPrompt = [{ role: "user", parts: [{ text: `Message: "${question}"\nIs this a simple greeting, thank you, small talk, OR a follow-up question/instruction regarding a previous reading (like "simplify", "explain", "I didn't understand")? If it does NOT require drawing brand new tarot cards for a new topic, answer YES. If it is a new request for a tarot reading, answer NO. Answer ONLY YES or NO.` }] }];
       const intentResponse = await callGemini(intentPrompt as any, "You are an intent classifier. Answer ONLY YES or NO.");
       isConversational = intentResponse.trim().toUpperCase().includes("YES");
     }
@@ -251,8 +251,9 @@ Deno.serve(async (req: Request) => {
       ? `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst. 
 CRITICAL RULES:
 1. ALWAYS respond in the exact same language that the user used.
-2. The user is just chatting or greeting you. Respond conversationally, keeping your wise and empathetic tone.
-3. Do not give a reading. Just warmly answer their small talk. Keep it very short (1-2 sentences).
+2. The user is either greeting you, making small talk, OR asking a follow-up question/giving feedback about their previous reading (e.g. "simplify", "explain", "I don't understand").
+3. If they are asking about the previous reading or giving an instruction like "simplify", answer their question or fulfill their request based on the chat history. Maintain your wise, mystical tone but make sure you actually do what they asked.
+4. If it's just small talk or a greeting, warmly acknowledge it. Keep it concise.
 ${hiddenContext ? "\n" + hiddenContext : ""}`
       : `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst using the Rider-Waite tarot tradition.
 CRITICAL RULES:
