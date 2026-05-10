@@ -99,33 +99,48 @@ function drawCards(count = 5) {
   }));
 }
 
-async function callGemini(prompt: string, systemInstruction: string): Promise<string> {
+async function callGemini(prompt: any, systemInstruction: string, attempt = 1): Promise<string> {
+  const MAX_RETRIES = 3;
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemInstruction }] },
-        contents: prompt,
-        generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 4096 },
-      }),
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: prompt,
+          generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 4096 },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error(`Gemini err (Status ${response.status}):`, errBody);
+      throw new Error(`Gemini HTTP ${response.status}`);
     }
-  );
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    console.error("Gemini err:", errBody);
-    throw new Error(`Gemini ${response.status}`);
+    const data = await response.json();
+    const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    console.log("=== GEMINI API OUTPUT ===\n", textOutput, "\n=========================");
+    return textOutput;
+  } catch (error: any) {
+    const isRetryable = error.message.includes("503") || error.message.includes("429") || error.message.includes("fetch") || error.message.includes("HTTP 50");
+    if (attempt <= MAX_RETRIES && isRetryable) {
+      const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      console.log(`[Attempt ${attempt} failed] ${error.message}. Retrying in ${Math.round(delay)}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return callGemini(prompt, systemInstruction, attempt + 1);
+    }
+    if (isRetryable) {
+      throw new Error("Tarot enerjileri şu an çok yoğun, lütfen birazdan tekrar dene.");
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  console.log("=== GEMINI API OUTPUT ===\n", textOutput, "\n=========================");
-  return textOutput;
 }
 
 async function getEmbedding(text: string): Promise<number[]> {
@@ -177,7 +192,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const { session_id, question, message_history } = await req.json();
-    const cards = drawCards(5);
+    
+    let isConversational = false;
+    if (question && question.trim().length > 0) {
+      const intentPrompt = [{ role: "user", parts: [{ text: `Message: "${question}"\nIs this a simple greeting, thank you, small talk, OR a follow-up question/instruction regarding a previous reading (like "simplify", "explain", "I didn't understand")? If it does NOT require drawing brand new tarot cards for a new topic, answer YES. If it is a new request for a tarot reading, answer NO. Answer ONLY YES or NO.` }] }];
+      const intentResponse = await callGemini(intentPrompt as any, "You are an intent classifier. Answer ONLY YES or NO.");
+      isConversational = intentResponse.trim().toUpperCase().includes("YES");
+    }
+    
+    const cards = isConversational ? [] : drawCards(5);
 
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -208,9 +231,9 @@ Deno.serve(async (req: Request) => {
     } catch (e) { console.log("=== RAG ERROR ===\n", e); }
 
     // Build card description
-    const cardDesc = cards
-      .map((c) => `${c.position}. ${c.name_tr} (${c.name})${c.is_reversed ? " — Ters" : ""}`)
-      .join("\n");
+    const cardDesc = cards.length > 0
+      ? cards.map((c) => `${c.position}. ${c.name_tr} (${c.name})${c.is_reversed ? " — Ters" : ""}`).join("\n")
+      : "";
 
     // Hidden context
     let hiddenContext = "";
@@ -224,7 +247,15 @@ Deno.serve(async (req: Request) => {
       hiddenContext += `\n[PAST INSIGHTS]\n${relevantInsights.join("\n")}\n`;
     }
 
-    const systemInstruction = `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst using the Rider-Waite tarot tradition.
+    const systemInstruction = isConversational
+      ? `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst. 
+CRITICAL RULES:
+1. ALWAYS respond in the exact same language that the user used.
+2. The user is either greeting you, making small talk, OR asking a follow-up question/giving feedback about their previous reading (e.g. "simplify", "explain", "I don't understand").
+3. If they are asking about the previous reading or giving an instruction like "simplify", answer their question or fulfill their request based on the chat history. Maintain your wise, mystical tone but make sure you actually do what they asked.
+4. If it's just small talk or a greeting, warmly acknowledge it. Keep it concise.
+${hiddenContext ? "\n" + hiddenContext : ""}`
+      : `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst using the Rider-Waite tarot tradition.
 CRITICAL RULES:
 1. ALWAYS respond in the exact same language that the user used in their last message. If they write in Turkish, respond entirely in Turkish.
 2. NEVER use cheap fortune-teller cliches (e.g., 'honey', 'fate is smiling at you', 'three days', 'fortune').
@@ -247,7 +278,9 @@ ${hiddenContext ? "\n" + hiddenContext : ""}`;
       });
     }
 
-    const currentTurnText = `Soru / Question: ${question || "Genel bir okuma istiyorum"}\n\nÇekilen Kartlar / Drawn Cards:\n${cardDesc}\n\nPlease interpret this based on your system instructions.`;
+    const currentTurnText = isConversational 
+      ? `Mesaj / Message: ${question}`
+      : `Soru / Question: ${question || "Genel bir okuma istiyorum"}\n\nÇekilen Kartlar / Drawn Cards:\n${cardDesc}\n\nPlease interpret this based on your system instructions.`;
     
     promptContents.push({
       role: "user",
@@ -258,7 +291,9 @@ ${hiddenContext ? "\n" + hiddenContext : ""}`;
     const reading = await callGemini(promptContents as any, systemInstruction);
 
     // Save
-    await serviceClient.from("card_draws").insert({ session_id, user_id: user.id, cards, question: question || null });
+    if (cards.length > 0) {
+      await serviceClient.from("card_draws").insert({ session_id, user_id: user.id, cards, question: question || null });
+    }
     const { data: savedMessage } = await serviceClient.from("messages")
       .insert({ session_id, user_id: user.id, role: "assistant", content: reading, metadata: { cards } })
       .select().single();

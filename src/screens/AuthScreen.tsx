@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,15 +10,36 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { useAuth } from '../providers/AuthProvider';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function AuthScreen() {
-  const { signIn, signUp, signInAnonymously, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const handleSubmit = async () => {
     if (!email || !password) {
@@ -49,115 +70,117 @@ export default function AuthScreen() {
     setLoading(false);
   };
 
-  const handleAnonymous = async () => {
-    setLoading(true);
-    const { error } = await signInAnonymously();
-    if (error) {
-      Alert.alert('Hata', error.message);
-    }
-    setLoading(false);
-  };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <LinearGradient
+        colors={['#0B0B1A', '#1A1025', '#0B0B1A']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.logo}>🔮</Text>
-          <Text style={styles.title}>Tarot Flow</Text>
-          <Text style={styles.subtitle}>
-            Kartlar seni tanımaya başlasın
-          </Text>
-        </View>
-
-        {/* Social Login Buttons */}
-        <View style={styles.socialSection}>
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={handleGoogleSignIn}
-            disabled={loading}
-          >
-            <Text style={styles.googleIcon}>G</Text>
-            <Text style={styles.googleButtonText}>Google ile devam et</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>veya email ile</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Email Form */}
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#555"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Şifre"
-            placeholderTextColor="#555"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          <TouchableOpacity
-            style={[styles.button, styles.primaryButton]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {isLogin ? 'Giriş Yap' : 'Kayıt Ol'}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setIsLogin(!isLogin)}
-            style={styles.switchButton}
-          >
-            <Text style={styles.switchText}>
-              {isLogin ? 'Hesabın yok mu? Kayıt ol' : 'Hesabın var mı? Giriş yap'}
+        <Animated.View
+          style={[
+            styles.animatedContainer,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+          ]}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <Text style={styles.logo}>🔮</Text>
+            </View>
+            <Text style={styles.title}>Tarot Flow</Text>
+            <Text style={styles.subtitle}>
+              Kartlar seni tanımaya başlasın
             </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* Anonymous */}
-        <View style={styles.anonymousSection}>
+          {/* Social Login Buttons */}
+          <View style={styles.socialSection}>
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleGoogleSignIn}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleButtonText}>Google ile devam et</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>veya</Text>
+            <Text style={styles.dividerText}>veya email ile</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, styles.ghostButton]}
-            onPress={handleAnonymous}
-            disabled={loading}
-          >
-            <Text style={styles.ghostButtonText}>
-              👻 Anonim olarak devam et
-            </Text>
-          </TouchableOpacity>
-        </View>
+          {/* Email Form */}
+          <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Email adresin"
+                placeholderTextColor="#7A7A9D"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Şifren"
+                placeholderTextColor="#7A7A9D"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.buttonContainer}
+              onPress={handleSubmit}
+              disabled={loading}
+            >
+              <LinearGradient
+                colors={['#8A2BE2', '#4B0082']}
+                style={styles.primaryButton}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.buttonText}>
+                    {isLogin ? 'Giriş Yap' : 'Kayıt Ol'}
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setIsLogin(!isLogin)}
+              style={styles.switchButton}
+            >
+              <Text style={styles.switchText}>
+                {isLogin ? 'Hesabın yok mu? Kayıt ol' : 'Hesabın var mı? Giriş yap'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -171,117 +194,147 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     paddingVertical: 40,
+  },
+  animatedContainer: {
+    flex: 1,
+    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 44,
+  },
+  logoContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(138, 43, 226, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(138, 43, 226, 0.3)',
+    shadowColor: '#8A2BE2',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
   },
   logo: {
-    fontSize: 64,
-    marginBottom: 12,
+    fontSize: 48,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 34,
+    fontWeight: '800',
     color: '#FFFFFF',
     marginBottom: 8,
+    letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: '#8B8BA7',
+    color: '#A0A0C0',
+    fontWeight: '400',
   },
 
   // Social
   socialSection: {
-    marginBottom: 4,
+    marginBottom: 8,
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 10,
+    borderRadius: 16,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    gap: 12,
   },
   googleIcon: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#4285F4',
   },
   googleButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#333',
   },
 
   // Form
   form: {
-    gap: 12,
+    gap: 16,
+  },
+  inputContainer: {
+    backgroundColor: 'rgba(30, 25, 45, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(138, 43, 226, 0.2)',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   input: {
-    backgroundColor: '#1A1A2E',
-    borderWidth: 1,
-    borderColor: '#2D2D3F',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     fontSize: 16,
     color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  buttonContainer: {
+    marginTop: 8,
+    shadowColor: '#8A2BE2',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 8,
   },
   button: {
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 4,
   },
   primaryButton: {
-    backgroundColor: '#6C5CE7',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   switchButton: {
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
+    marginTop: 4,
   },
   switchText: {
-    color: '#6C5CE7',
-    fontSize: 14,
+    color: '#B28DFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
 
   // Dividers
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#2D2D3F',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   dividerText: {
-    color: '#555',
-    paddingHorizontal: 12,
-    fontSize: 13,
-  },
-
-  // Anonymous
-  anonymousSection: {
-    marginTop: 4,
-  },
-  ghostButton: {
-    borderWidth: 1,
-    borderColor: '#2D2D3F',
-    backgroundColor: 'transparent',
-  },
-  ghostButtonText: {
-    color: '#8B8BA7',
-    fontSize: 15,
+    color: '#7A7A9D',
+    paddingHorizontal: 16,
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
