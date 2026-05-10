@@ -111,9 +111,9 @@ Deno.serve(async (req: Request) => {
     const schemaList = YOUNG_SCHEMAS.join(", ");
 
     // Multi-stage analysis prompt
-    const reflectionPrompt = `Conversation:\n${conversation}\n\nPerform a 3-step psychological analysis and return ONLY a valid JSON object:\n1. "subtext_summary": The underlying emotional theme of the session (2-3 sentences in Turkish).\n2. "active_schemas": From this list [${schemaList}], select any active schemas. Format: [{"schema": "Schema Name", "confidence": 0.0-1.0, "evidence": "Brief evidence in Turkish"}] (Only include those with confidence > 0.4).\n3. "psychoanalytic_insight": {"defense_mechanisms": ["list of defenses in Turkish"], "core_belief_hypothesis": "Core belief in Turkish", "avoidance_areas": ["avoidance areas in Turkish"], "deep_insight": "Overall deep insight in Turkish"}`;
+    const reflectionPrompt = `Conversation:\n${conversation}\n\nPerform a 3-step psychological analysis and return ONLY a valid JSON object:\n1. "subtext_summary": The underlying emotional theme of the session (2-3 sentences in English).\n2. "active_schemas": From this list [${schemaList}], select any active schemas. Format: [{"schema": "Schema Name", "confidence": 0.0-1.0, "evidence": "Brief evidence in English"}] (Only include those with confidence > 0.4).\n3. "psychoanalytic_insight": {"defense_mechanisms": ["list of defenses in English"], "core_belief_hypothesis": "Core belief in English", "avoidance_areas": ["avoidance areas in English"], "deep_insight": "Overall deep insight in English"}`;
 
-    const reflectionSI = "You are an expert clinical psychologist and psychoanalyst specializing in Young Schema Therapy. Be objective, evidence-based, and precise. Your output MUST be valid JSON. The values inside the JSON must be in Turkish.";
+    const reflectionSI = "You are an expert clinical psychologist and psychoanalyst specializing in Young Schema Therapy. Be objective, evidence-based, and precise. Your output MUST be valid JSON. The values inside the JSON MUST be in English.";
 
     const rawResult = await callGemini([{ role: "user", parts: [{ text: reflectionPrompt }] }] as any, reflectionSI);
 
@@ -146,7 +146,7 @@ Deno.serve(async (req: Request) => {
       console.log("=== REFLECTION: SCHEMAS ===");
       for (const s of reflection.active_schemas) {
         console.log(`Schema: ${s.schema} (Confidence: ${s.confidence})`);
-        const content = `Şema: ${s.schema} - ${s.evidence || ""}`;
+        const content = `Schema: ${s.schema} - ${s.evidence || ""}`;
         const emb = await getEmbedding(content);
         await serviceClient.from("user_insights").insert({
           user_id: user.id, session_id, insight_type: "schema_tag",
@@ -164,9 +164,9 @@ Deno.serve(async (req: Request) => {
       const pi = reflection.psychoanalytic_insight;
       console.log("=== REFLECTION: DEEP INSIGHT ===\n", JSON.stringify(pi, null, 2), "\n================================");
       const deepContent = [
-        pi.core_belief_hypothesis ? `Kök: ${pi.core_belief_hypothesis}` : "",
-        pi.defense_mechanisms?.length > 0 ? `Savunma: ${pi.defense_mechanisms.join(", ")}` : "",
-        pi.deep_insight ? `İçgörü: ${pi.deep_insight}` : "",
+        pi.core_belief_hypothesis ? `Core Belief: ${pi.core_belief_hypothesis}` : "",
+        pi.defense_mechanisms?.length > 0 ? `Defenses: ${pi.defense_mechanisms.join(", ")}` : "",
+        pi.deep_insight ? `Insight: ${pi.deep_insight}` : "",
       ].filter(Boolean).join("\n");
 
       if (deepContent) {
@@ -222,8 +222,8 @@ Deno.serve(async (req: Request) => {
 
       const narrative = [
         latestCoreBelief?.content,
-        dominantSchemas.length > 0 ? `Şemalar: ${dominantSchemas.map((s) => s.schema).join(", ")}` : "",
-        dominantDefenses.length > 0 ? `Savunmalar: ${dominantDefenses.join(", ")}` : "",
+        dominantSchemas.length > 0 ? `Schemas: ${dominantSchemas.map((s) => s.schema).join(", ")}` : "",
+        dominantDefenses.length > 0 ? `Defenses: ${dominantDefenses.join(", ")}` : "",
       ].filter(Boolean).join("\n");
 
       const profileEmbedding = narrative ? await getEmbedding(narrative) : null;

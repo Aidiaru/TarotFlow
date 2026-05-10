@@ -197,11 +197,16 @@ export default function ChatScreen() {
         message_history: [...history, { role: 'user', content: question }],
       });
 
-      const savedAssistantMsg = await saveMessage(
-        currentSession.id, user.id, 'assistant', response.reading,
-        { cards: response.cards }
-      );
-      setMessages((prev) => [...prev, savedAssistantMsg]);
+      const newAssistantMsg: Message = {
+        id: response.message_id || Math.random().toString(),
+        session_id: currentSession.id,
+        user_id: user.id,
+        role: 'assistant',
+        content: response.reading,
+        metadata: { cards: response.cards },
+        created_at: new Date().toISOString()
+      };
+      setMessages((prev) => [...prev, newAssistantMsg]);
       scrollToBottom();
     } catch (error: any) {
       setRetryPayload({ question, history });

@@ -230,6 +230,21 @@ Deno.serve(async (req: Request) => {
       }
     } catch (e) { console.log("=== RAG ERROR ===\n", e); }
 
+    // Fetch Active Session Behavioral Insights
+    let activeInsightsContext = "";
+    try {
+      const { data: activeInsights } = await serviceClient
+        .from("user_insights")
+        .select("content")
+        .eq("session_id", session_id)
+        .eq("insight_type", "behavioral_pattern");
+        
+      if (activeInsights && activeInsights.length > 0) {
+        activeInsightsContext = `\n[ACTIVE SESSION BEHAVIORAL OBSERVATIONS]\n${activeInsights.map(i => i.content).join("\n")}\n`;
+        console.log("=== ACTIVE SESSION INSIGHTS ===\n", activeInsightsContext, "\n=============================");
+      }
+    } catch (e) { console.log("=== ACTIVE INSIGHTS ERROR ===\n", e); }
+
     // Build card description
     const cardDesc = cards.length > 0
       ? cards.map((c) => `${c.position}. ${c.name_tr} (${c.name})${c.is_reversed ? " — Ters" : ""}`).join("\n")
@@ -246,6 +261,9 @@ Deno.serve(async (req: Request) => {
     if (relevantInsights.length > 0) {
       hiddenContext += `\n[PAST INSIGHTS]\n${relevantInsights.join("\n")}\n`;
     }
+    if (activeInsightsContext) {
+      hiddenContext += activeInsightsContext;
+    }
 
     const systemInstruction = isConversational
       ? `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst. 
@@ -257,11 +275,11 @@ CRITICAL RULES:
 ${hiddenContext ? "\n" + hiddenContext : ""}`
       : `You are an ancient, mystical oracle and deeply intuitive Jungian psychoanalyst using the Rider-Waite tarot tradition.
 CRITICAL RULES:
-1. ALWAYS respond in the exact same language that the user used in their last message. If they write in Turkish, respond entirely in Turkish.
-2. NEVER use cheap fortune-teller cliches (e.g., 'honey', 'fate is smiling at you', 'three days', 'fortune').
-3. Do not explain the cards one by one like a robot. Weave them into a single, cohesive narrative.
-4. Integrate any [HIDDEN PSYCHOLOGICAL PROFILE] or [PAST INSIGHTS] seamlessly into your reading as if you are reading their soul. Do not explicitly mention psychological terms like "schema", "anxiety", or "core belief". Frame these insights using mystical, poetic, and profound metaphors.
-5. Keep your tone wise, timeless, and empathetic. 2-3 paragraphs.
+1. ALWAYS respond in the exact same language that the user used in their last message.
+2. NEVER use cheap fortune-teller cliches (e.g., 'honey', 'fate is smiling').
+3. DO NOT force [PAST INSIGHTS] onto the current cards. Avoid Confirmation Bias. First, objectively read the symbolic meaning of the cards on the table. If the cards naturally align with the user's past profile, mention it. If the cards point to a completely different issue, ignore the past profile.
+4. Avoid excessive "new-age" poetic metaphors (e.g., 'holy healing', 'stay in the light'). Keep your tone grounded, sharp, and analytical, seamlessly blending Jungian psychology with the true archetypal meanings of the cards.
+5. Be concise and impactful. Do not write overly long paragraphs. Weave the cards into a cohesive narrative.
 ${hiddenContext ? "\n" + hiddenContext : ""}`;
 
     // Conversation context (Proper Gemini multi-turn format)
@@ -302,8 +320,8 @@ ${hiddenContext ? "\n" + hiddenContext : ""}`;
     try {
       if (question && question.length > 20) {
         const microInsight = await callGemini(
-          [{ role: "user", parts: [{ text: `Message: "${question}"\nSummarize the linguistic pattern and underlying emotional tone of this message in 1-2 objective sentences in Turkish.` }] }],
-          "You are a clinical linguistic analyst. Keep it extremely brief, objective, and in Turkish."
+          [{ role: "user", parts: [{ text: `Message: "${question}"\nSummarize the linguistic pattern and underlying emotional tone of this message in 1-2 objective sentences in English.` }] }],
+          "You are a clinical linguistic analyst. Keep it extremely brief, objective, and in English."
         );
         if (microInsight) {
           console.log("=== MICRO-PROFILING CREATED ===\n", microInsight, "\n===============================");
