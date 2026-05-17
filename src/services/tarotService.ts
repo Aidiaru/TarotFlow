@@ -45,7 +45,7 @@ export async function endSession(sessionId: string): Promise<void> {
 
 export async function deleteSession(sessionId: string): Promise<void> {
   // Delete all related data first
-  await supabase.from('user_insights').delete().eq('session_id', sessionId);
+  await supabase.from('clinical_observations').delete().eq('session_id', sessionId);
   await supabase.from('card_draws').delete().eq('session_id', sessionId);
   await supabase.from('messages').delete().eq('session_id', sessionId);
   const { error } = await supabase.from('sessions').delete().eq('id', sessionId);

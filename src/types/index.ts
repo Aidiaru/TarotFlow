@@ -48,21 +48,17 @@ export interface CardDraw {
   created_at: string;
 }
 
-export interface UserInsight {
+export interface ClinicalObservation {
   id: string;
   user_id: string;
   session_id: string | null;
-  insight_type: 'schema_tag' | 'defense_mechanism' | 'core_belief' | 'session_summary' | 'behavioral_pattern';
   content: string;
   confidence: number;
-  schemas_detected: SchemaDetection[];
-  metadata: Record<string, any>;
+  tags: string[];
+  event_context: string | null;
+  source: 'gate' | 'consolidation' | 'validation';
+  is_consolidated: boolean;
   created_at: string;
-}
-
-export interface SchemaDetection {
-  schema: string;
-  confidence: number;
 }
 
 export interface UserProfileCard {
@@ -70,7 +66,7 @@ export interface UserProfileCard {
   user_id: string;
   core_belief_hypothesis: string | null;
   dominant_defenses: string[];
-  dominant_schemas: SchemaDetection[];
+  dominant_schemas: { schema: string; confidence: number }[];
   narrative: string | null;
   session_count: number;
   last_consolidated: string;
@@ -100,5 +96,5 @@ export interface SessionReflectionRequest {
 
 export interface SessionReflectionResponse {
   success: boolean;
-  insights_created: number;
+  observations_created: number;
 }

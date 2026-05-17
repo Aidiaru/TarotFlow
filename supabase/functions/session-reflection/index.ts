@@ -111,9 +111,9 @@ Deno.serve(async (req: Request) => {
     const schemaList = YOUNG_SCHEMAS.join(", ");
 
     // Multi-stage analysis prompt
-    const reflectionPrompt = `Conversation:\n${conversation}\n\nPerform a 3-step psychological analysis and return ONLY a valid JSON object:\n1. "subtext_summary": The underlying emotional theme of the session (2-3 sentences in English).\n2. "active_schemas": From this list [${schemaList}], select any active schemas. Format: [{"schema": "Schema Name", "confidence": 0.0-1.0, "evidence": "Brief evidence in English"}] (Only include those with confidence > 0.4).\n3. "psychoanalytic_insight": {"defense_mechanisms": ["list of defenses in English"], "core_belief_hypothesis": "Core belief in English", "avoidance_areas": ["avoidance areas in English"], "deep_insight": "Overall deep insight in English"}`;
+    const reflectionPrompt = `Conversation:\n${conversation}\n\nPerform a 3-step psychological analysis and return ONLY a valid JSON object:\n1. "subtext_summary": The underlying emotional theme of the session (2-3 sentences in English).\n2. "active_schemas": Any relevant psychological patterns you observe. You MAY reference Young's 18 schemas (${schemaList}) as vocabulary if they fit naturally, but DO NOT force observations into these categories. If you see a pattern that doesn't fit any schema, describe it freely. Format: [{"schema": "Pattern Name", "confidence": 0.0-1.0, "evidence": "Brief evidence in English"}] (Only include those with confidence > 0.4).\n3. "psychoanalytic_insight": {"defense_mechanisms": ["list of defenses in English"], "core_belief_hypothesis": "Core belief in English", "avoidance_areas": ["avoidance areas in English"], "deep_insight": "Overall deep insight in English"}`;
 
-    const reflectionSI = "You are an expert clinical psychologist and psychoanalyst specializing in Young Schema Therapy. Be objective, evidence-based, and precise. Your output MUST be valid JSON. The values inside the JSON MUST be in English.";
+    const reflectionSI = "You are an expert clinical psychologist. Be objective, evidence-based, and precise. Your output MUST be valid JSON. The values inside the JSON MUST be in English. Observe what is actually there — do not force patterns into predefined categories.";
 
     const rawResult = await callGemini([{ role: "user", parts: [{ text: reflectionPrompt }] }] as any, reflectionSI);
 
@@ -127,39 +127,41 @@ Deno.serve(async (req: Request) => {
       else throw new Error("Parse failed");
     }
 
-    let insightsCreated = 0;
+    let observationsCreated = 0;
 
-    // Save subtext summary
+    // Save as clinical observations (unified approach)
+    // Subtext summary → clinical observation (source='consolidation')
     if (reflection.subtext_summary) {
       console.log("=== REFLECTION: SUBTEXT SUMMARY ===\n", reflection.subtext_summary, "\n===================================");
       const emb = await getEmbedding(reflection.subtext_summary);
-      await serviceClient.from("user_insights").insert({
-        user_id: user.id, session_id, insight_type: "session_summary",
+      await serviceClient.from("clinical_observations").insert({
+        user_id: user.id, session_id,
         content: reflection.subtext_summary, embedding: emb,
-        confidence: 0.7, metadata: { stage: "subtext" },
+        confidence: 0.7, source: "consolidation",
+        tags: ["session_summary"],
       });
-      insightsCreated++;
+      observationsCreated++;
     }
 
-    // Save active schemas
+    // Active schemas → clinical observations with schema tags
     if (reflection.active_schemas && Array.isArray(reflection.active_schemas)) {
       console.log("=== REFLECTION: SCHEMAS ===");
       for (const s of reflection.active_schemas) {
         console.log(`Schema: ${s.schema} (Confidence: ${s.confidence})`);
         const content = `Schema: ${s.schema} - ${s.evidence || ""}`;
         const emb = await getEmbedding(content);
-        await serviceClient.from("user_insights").insert({
-          user_id: user.id, session_id, insight_type: "schema_tag",
+        await serviceClient.from("clinical_observations").insert({
+          user_id: user.id, session_id,
           content, embedding: emb, confidence: s.confidence || 0.5,
-          schemas_detected: [{ schema: s.schema, confidence: s.confidence || 0.5 }],
-          metadata: { stage: "schema" },
+          source: "consolidation",
+          tags: [s.schema.toLowerCase().replace(/\s+/g, "_"), "schema"],
         });
-        insightsCreated++;
+        observationsCreated++;
       }
       console.log("===========================");
     }
 
-    // Save psychoanalytic insight
+    // Psychoanalytic insight → clinical observation
     if (reflection.psychoanalytic_insight) {
       const pi = reflection.psychoanalytic_insight;
       console.log("=== REFLECTION: DEEP INSIGHT ===\n", JSON.stringify(pi, null, 2), "\n================================");
@@ -170,77 +172,23 @@ Deno.serve(async (req: Request) => {
       ].filter(Boolean).join("\n");
 
       if (deepContent) {
+        const tags = ["psychoanalytic"];
+        if (pi.defense_mechanisms) tags.push(...pi.defense_mechanisms.map((d: string) => d.toLowerCase().replace(/\s+/g, "_")));
+        if (pi.avoidance_areas) tags.push(...pi.avoidance_areas.map((a: string) => a.toLowerCase().replace(/\s+/g, "_")));
+
         const emb = await getEmbedding(deepContent);
-        await serviceClient.from("user_insights").insert({
-          user_id: user.id, session_id, insight_type: "core_belief",
+        await serviceClient.from("clinical_observations").insert({
+          user_id: user.id, session_id,
           content: deepContent, embedding: emb, confidence: 0.5,
-          metadata: {
-            stage: "psychoanalytic",
-            defense_mechanisms: pi.defense_mechanisms || [],
-            avoidance_areas: pi.avoidance_areas || [],
-          },
+          source: "consolidation", tags,
         });
-        insightsCreated++;
+        observationsCreated++;
       }
     }
 
-    // Profile consolidation
-    const { data: allInsights } = await serviceClient
-      .from("user_insights").select("*").eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (allInsights && allInsights.length >= 2) {
-      // Aggregate schemas
-      const schemaMap = new Map<string, { total: number; count: number }>();
-      for (const ins of allInsights) {
-        if (ins.schemas_detected) {
-          for (const sd of ins.schemas_detected) {
-            const ex = schemaMap.get(sd.schema) || { total: 0, count: 0 };
-            schemaMap.set(sd.schema, { total: ex.total + (sd.confidence || 0.5), count: ex.count + 1 });
-          }
-        }
-      }
-
-      const dominantSchemas = Array.from(schemaMap.entries())
-        .map(([s, { total, count }]) => ({ schema: s, confidence: total / count, evidence_count: count }))
-        .filter((s) => s.confidence > 0.4)
-        .sort((a, b) => b.confidence - a.confidence)
-        .slice(0, 5);
-
-      // Aggregate defenses
-      const allDefenses = allInsights
-        .filter((i: any) => i.metadata?.defense_mechanisms)
-        .flatMap((i: any) => i.metadata.defense_mechanisms);
-      const defenseFreq = new Map<string, number>();
-      for (const d of allDefenses) defenseFreq.set(d, (defenseFreq.get(d) || 0) + 1);
-      const dominantDefenses = Array.from(defenseFreq.entries())
-        .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([d]) => d);
-
-      // Latest core belief
-      const latestCoreBelief = allInsights.find((i: any) => i.insight_type === "core_belief");
-      const sessionCount = new Set(allInsights.map((i: any) => i.session_id).filter(Boolean)).size;
-
-      const narrative = [
-        latestCoreBelief?.content,
-        dominantSchemas.length > 0 ? `Schemas: ${dominantSchemas.map((s) => s.schema).join(", ")}` : "",
-        dominantDefenses.length > 0 ? `Defenses: ${dominantDefenses.join(", ")}` : "",
-      ].filter(Boolean).join("\n");
-
-      const profileEmbedding = narrative ? await getEmbedding(narrative) : null;
-      console.log("=== REFLECTION: UPDATED PROFILE NARRATIVE ===\n", narrative, "\n=============================================");
-
-      await serviceClient.from("user_profile_cards").upsert({
-        user_id: user.id,
-        core_belief_hypothesis: reflection.psychoanalytic_insight?.core_belief_hypothesis || latestCoreBelief?.content,
-        dominant_defenses: dominantDefenses,
-        dominant_schemas: dominantSchemas,
-        narrative,
-        embedding: profileEmbedding,
-        session_count: sessionCount,
-        last_consolidated: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id" });
-    }
+    // NOTE: Profile consolidation is NOT done here.
+    // It is handled by tarot-reading's signal-based consolidation (≥5 unconsolidated signals).
+    // session-reflection only WRITES clinical observations. Profile updates happen separately.
 
     // Mark session as completed
     await serviceClient.from("sessions").update({
@@ -249,7 +197,7 @@ Deno.serve(async (req: Request) => {
       message_count: msgs.length,
     }).eq("id", session_id);
 
-    return new Response(JSON.stringify({ success: true, insights_created: insightsCreated }),
+    return new Response(JSON.stringify({ success: true, observations_created: observationsCreated }),
       { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     console.error("FATAL:", (error as Error).message);

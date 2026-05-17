@@ -77,7 +77,7 @@ export default function AuthScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <LinearGradient
-        colors={['#0B0B1A', '#1A1025', '#0B0B1A']}
+        colors={['#0A0A16', '#140E28', '#0A0A16']}
         style={StyleSheet.absoluteFillObject}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -189,7 +189,7 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0D0D1A',
+    backgroundColor: '#0A0A16',
   },
   scrollContent: {
     flexGrow: 1,

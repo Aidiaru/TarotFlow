@@ -220,7 +220,7 @@ export default function ChatScreen() {
     if (!currentSession) return;
     Alert.alert(
       'Oturumu Bitir',
-      'Bu oturum kapatılacak ve psikolojik analiz yapılacak.',
+      'Bu oturum kapatılacak ve kartlar hafızaya alınacak.',
       [
         { text: 'İptal', style: 'cancel' },
         {
@@ -462,8 +462,8 @@ export default function ChatScreen() {
         {/* Loading */}
         {loading && (
           <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color="#6C5CE7" />
-            <Text style={styles.loadingText}>Yanıt hazırlanıyor...</Text>
+            <ActivityIndicator size="small" color="#9B8AFF" />
+            <Text style={styles.loadingText}>Kartlar okunuyor...</Text>
           </View>
         )}
 
@@ -486,7 +486,7 @@ export default function ChatScreen() {
             <TextInput
               style={styles.input}
               placeholder="Niyetini belirt veya soru sor..."
-              placeholderTextColor="#555"
+              placeholderTextColor="#5A5A7A"
               value={inputText}
               onChangeText={setInputText}
               multiline
@@ -518,161 +518,197 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D1A' },
+  container: { flex: 1, backgroundColor: '#0A0A16' },
 
-  // OVERLAY
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     zIndex: 10,
   },
 
   // DRAWER
   drawer: {
     position: 'absolute', top: 0, bottom: 0, left: 0,
-    width: DRAWER_WIDTH, backgroundColor: '#111128',
+    width: DRAWER_WIDTH, backgroundColor: '#0D0D20',
     zIndex: 20, paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    borderRightWidth: 1, borderRightColor: '#1C1C3A',
+    borderRightWidth: 1, borderRightColor: 'rgba(124, 92, 252, 0.1)',
   },
   drawerHeader: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingBottom: 20, gap: 10,
+    paddingHorizontal: 20, paddingBottom: 24, gap: 10,
   },
-  drawerLogo: { fontSize: 24 },
-  drawerBrand: { fontSize: 20, fontWeight: '700', color: '#FFF' },
+  drawerLogo: { fontSize: 26 },
+  drawerBrand: {
+    fontSize: 22, fontWeight: '800', color: '#F5F5F5',
+    letterSpacing: 1,
+  },
 
   newChatBtn: {
     flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 12, paddingVertical: 12, paddingHorizontal: 16,
-    borderRadius: 10, borderWidth: 1, borderColor: '#2A2A4A',
-    gap: 10, marginBottom: 8,
+    marginHorizontal: 12, paddingVertical: 13, paddingHorizontal: 16,
+    borderRadius: 12, gap: 10, marginBottom: 8,
+    backgroundColor: 'rgba(124, 92, 252, 0.08)',
+    borderWidth: 1, borderColor: 'rgba(124, 92, 252, 0.2)',
   },
-  newChatIcon: { fontSize: 18, color: '#FFF', fontWeight: '300' },
-  newChatText: { fontSize: 14, color: '#E0E0E0', fontWeight: '500' },
+  newChatIcon: { fontSize: 20, color: '#9B8AFF', fontWeight: '300' },
+  newChatText: { fontSize: 14, color: '#C8BFFF', fontWeight: '600' },
 
   sessionListContainer: { flex: 1 },
   groupTitle: {
-    color: '#666', fontSize: 11, fontWeight: '600',
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 6,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+    color: '#5A5A7A', fontSize: 10, fontWeight: '700',
+    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 6,
+    textTransform: 'uppercase', letterSpacing: 1.5,
   },
   sessionItem: {
-    paddingHorizontal: 12, paddingVertical: 10, marginHorizontal: 8,
-    borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 11, marginHorizontal: 8,
+    borderRadius: 10,
   },
-  sessionItemActive: { backgroundColor: '#1E1E3A' },
+  sessionItemActive: {
+    backgroundColor: 'rgba(124, 92, 252, 0.1)',
+    borderWidth: 1, borderColor: 'rgba(124, 92, 252, 0.15)',
+  },
   sessionItemRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   sessionItemIcon: { fontSize: 16 },
   sessionItemTextWrap: { flex: 1 },
-  sessionItemTitle: { color: '#E0E0E0', fontSize: 14, fontWeight: '400' },
-  sessionItemMeta: { color: '#555', fontSize: 11, marginTop: 2 },
+  sessionItemTitle: { color: '#D8D0E8', fontSize: 14, fontWeight: '500' },
+  sessionItemMeta: { color: '#5A5A7A', fontSize: 11, marginTop: 2 },
   deleteButton: {
     width: 24, height: 24, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
   },
-  deleteIcon: { color: '#555', fontSize: 12 },
-  emptyText: { color: '#555', textAlign: 'center', paddingVertical: 24, fontSize: 14 },
+  deleteIcon: { color: '#5A5A7A', fontSize: 12 },
+  emptyText: { color: '#5A5A7A', textAlign: 'center', paddingVertical: 24, fontSize: 14 },
 
   drawerFooter: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderTopWidth: 1, borderTopColor: '#1C1C3A',
+    paddingHorizontal: 16, paddingVertical: 16,
+    borderTopWidth: 1, borderTopColor: 'rgba(124, 92, 252, 0.08)',
   },
   userInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   userAvatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#6C5CE7', alignItems: 'center', justifyContent: 'center',
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(124, 92, 252, 0.2)',
+    borderWidth: 1, borderColor: 'rgba(124, 92, 252, 0.3)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  userAvatarText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  userEmail: { color: '#999', fontSize: 13, flex: 1 },
-  logoutText: { color: '#FF6B6B', fontSize: 13 },
+  userAvatarText: { color: '#C8BFFF', fontSize: 14, fontWeight: '700' },
+  userEmail: { color: '#7A7A9D', fontSize: 13, flex: 1 },
+  logoutText: { color: '#FF6B6B', fontSize: 13, fontWeight: '500' },
 
   // MAIN
   main: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#1A1A2E', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(124, 92, 252, 0.06)',
+    gap: 12,
+    backgroundColor: 'rgba(10, 10, 22, 0.9)',
   },
   menuBtn: {
-    width: 38, height: 38, borderRadius: 8,
-    backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: 'rgba(124, 92, 252, 0.08)',
+    borderWidth: 1, borderColor: 'rgba(124, 92, 252, 0.15)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  menuIcon: { fontSize: 18, color: '#FFF' },
+  menuIcon: { fontSize: 18, color: '#C8BFFF' },
   headerCenter: { flex: 1 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#FFF' },
-  endBtn: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8,
-    borderWidth: 1, borderColor: '#FF6B6B40',
+  headerTitle: {
+    fontSize: 17, fontWeight: '700', color: '#F5F5F5',
+    letterSpacing: 0.3,
   },
-  endBtnText: { color: '#FF6B6B', fontSize: 13, fontWeight: '500' },
+  endBtn: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
+    borderWidth: 1, borderColor: 'rgba(255, 107, 107, 0.25)',
+    backgroundColor: 'rgba(255, 107, 107, 0.06)',
+  },
+  endBtnText: { color: '#FF8A8A', fontSize: 13, fontWeight: '600' },
 
   // WELCOME
   welcome: {
     position: 'absolute', top: 60, left: 0, right: 0, bottom: 60,
     justifyContent: 'center', alignItems: 'center',
-    paddingHorizontal: 32, zIndex: -1,
+    paddingHorizontal: 36, zIndex: -1,
   },
-  welcomeEmoji: { fontSize: 56, marginBottom: 12 },
-  welcomeTitle: { fontSize: 22, fontWeight: '600', color: '#FFF', marginBottom: 10 },
-  welcomeText: { fontSize: 15, color: '#888', textAlign: 'center', lineHeight: 22 },
+  welcomeEmoji: { fontSize: 64, marginBottom: 16 },
+  welcomeTitle: {
+    fontSize: 26, fontWeight: '800', color: '#F5F5F5',
+    marginBottom: 10, letterSpacing: 1,
+  },
+  welcomeText: {
+    fontSize: 15, color: '#7A7A9D', textAlign: 'center', lineHeight: 24,
+  },
   suggestions: {
     flexDirection: 'row', flexWrap: 'wrap',
-    justifyContent: 'center', gap: 8, marginTop: 24,
+    justifyContent: 'center', gap: 10, marginTop: 28,
   },
   suggestionChip: {
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderRadius: 20, borderWidth: 1, borderColor: '#2A2A4A',
-    backgroundColor: '#1A1A2E',
+    paddingHorizontal: 18, paddingVertical: 12,
+    borderRadius: 24, borderWidth: 1,
+    borderColor: 'rgba(124, 92, 252, 0.2)',
+    backgroundColor: 'rgba(124, 92, 252, 0.06)',
   },
-  suggestionText: { color: '#AAA', fontSize: 13 },
+  suggestionText: { color: '#B8AEFF', fontSize: 13, fontWeight: '500' },
 
   // MESSAGES
   messageList: { flex: 1 },
-  messageListContent: { paddingVertical: 12 },
+  messageListContent: { paddingVertical: 14 },
 
   loadingRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 12, gap: 8,
+    paddingVertical: 16, gap: 10,
   },
-  loadingText: { color: '#6C5CE7', fontSize: 13 },
+  loadingText: { color: '#9B8AFF', fontSize: 13, fontWeight: '500', fontStyle: 'italic' },
 
   retryRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 12, gap: 12,
+    paddingVertical: 14, gap: 12,
   },
-  retryText: { color: '#FF6B6B', fontSize: 13 },
+  retryText: { color: '#FF8A8A', fontSize: 13 },
   retryButton: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: '#FF6B6B20', borderRadius: 16,
-    borderWidth: 1, borderColor: '#FF6B6B40',
+    paddingHorizontal: 18, paddingVertical: 9,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)', borderRadius: 20,
+    borderWidth: 1, borderColor: 'rgba(255, 107, 107, 0.25)',
   },
-  retryButtonText: { color: '#FF6B6B', fontSize: 13, fontWeight: '500' },
+  retryButtonText: { color: '#FF8A8A', fontSize: 13, fontWeight: '600' },
 
   // INPUT
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end',
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderTopWidth: 1, borderTopColor: '#1A1A2E', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 12,
+    borderTopWidth: 1, borderTopColor: 'rgba(124, 92, 252, 0.06)',
+    gap: 10,
+    backgroundColor: 'rgba(10, 10, 22, 0.95)',
   },
   input: {
-    flex: 1, backgroundColor: '#1A1A2E', borderRadius: 20,
-    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10,
-    fontSize: 15, color: '#FFF', maxHeight: 100, minHeight: 44,
-    borderWidth: 1, borderColor: '#2D2D3F',
+    flex: 1, borderRadius: 22,
+    paddingHorizontal: 18, paddingTop: 12, paddingBottom: 12,
+    fontSize: 15, color: '#E8E0F0', maxHeight: 100, minHeight: 46,
+    backgroundColor: 'rgba(20, 18, 40, 0.8)',
+    borderWidth: 1, borderColor: 'rgba(124, 92, 252, 0.12)',
   },
   sendBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#6C5CE7', alignItems: 'center', justifyContent: 'center',
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: '#7C5CFC', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#7C5CFC',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  sendBtnOff: { backgroundColor: '#2D2D3F' },
+  sendBtnOff: {
+    backgroundColor: 'rgba(42, 38, 60, 0.8)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   sendIcon: { color: '#FFF', fontSize: 22, fontWeight: '700' },
 
   // READ-ONLY
   readOnlyBar: {
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderTopWidth: 1, borderTopColor: '#1A1A2E',
+    paddingHorizontal: 16, paddingVertical: 16,
+    borderTopWidth: 1, borderTopColor: 'rgba(124, 92, 252, 0.06)',
     alignItems: 'center',
+    backgroundColor: 'rgba(10, 10, 22, 0.95)',
   },
-  readOnlyText: { color: '#666', fontSize: 13, textAlign: 'center' },
+  readOnlyText: { color: '#5A5A7A', fontSize: 13, textAlign: 'center' },
 });
+
