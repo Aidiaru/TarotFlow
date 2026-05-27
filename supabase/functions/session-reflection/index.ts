@@ -1,14 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const YOUNG_SCHEMAS = [
-  "Terk Edilme", "Güvensizlik", "Duygusal Yoksunluk", "Kusurluluk",
-  "Sosyal İzolasyon", "Bağımlılık", "Hasara Açıklık", "İç İçe Geçme",
-  "Başarısızlık", "Haklılık", "Yetersiz Özdenetim", "Boyun Eğicilik",
-  "Kendini Feda", "Onay Arayıcılık", "Karamsarlık", "Duyguları Bastırma",
-  "Yüksek Standartlar", "Cezalandırıcılık",
-];
-
 async function callGemini(promptContents: any, systemInstruction: string): Promise<string> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
@@ -105,17 +97,49 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const conversation = msgs
-      .map((m: any) => `${m.role === "user" ? "Danışan" : "Okuyucu"}: ${m.content}`)
+    // Extract ONLY user messages — bot's interpretations are NOT analyzed
+    const userMessages = msgs
+      .filter((m: any) => m.role === "user")
+      .map((m: any) => m.content);
+
+    const fullConversation = msgs
+      .map((m: any) => `${m.role === "user" ? "User" : "Reader"}: ${m.content}`)
       .join("\n\n");
-    const schemaList = YOUNG_SCHEMAS.join(", ");
 
-    // Multi-stage analysis prompt
-    const reflectionPrompt = `Conversation:\n${conversation}\n\nPerform a 3-step psychological analysis and return ONLY a valid JSON object:\n1. "subtext_summary": The underlying emotional theme of the session (2-3 sentences in English).\n2. "active_schemas": Any relevant psychological patterns you observe. You MAY reference Young's 18 schemas (${schemaList}) as vocabulary if they fit naturally, but DO NOT force observations into these categories. If you see a pattern that doesn't fit any schema, describe it freely. Format: [{"schema": "Pattern Name", "confidence": 0.0-1.0, "evidence": "Brief evidence in English"}] (Only include those with confidence > 0.4).\n3. "psychoanalytic_insight": {"defense_mechanisms": ["list of defenses in English"], "core_belief_hypothesis": "Core belief in English", "avoidance_areas": ["avoidance areas in English"], "deep_insight": "Overall deep insight in English"}`;
+    // ============================================================
+    // REDUCED SCOPE: Session Summary + User-Word Observations ONLY
+    // Schema analysis, core beliefs, and defense mechanisms are
+    // handled EXCLUSIVELY by tarot-reading's signal-based consolidation.
+    // ============================================================
+    const reflectionPrompt = `SESSION CONVERSATION:
+${fullConversation}
 
-    const reflectionSI = "You are an expert clinical psychologist. Be objective, evidence-based, and precise. Your output MUST be valid JSON. The values inside the JSON MUST be in English. Observe what is actually there — do not force patterns into predefined categories.";
+USER'S OWN WORDS (extracted for your focus):
+${userMessages.map((m: string, i: number) => `${i + 1}. "${m}"`).join("\n")}
 
-    const rawResult = await callGemini([{ role: "user", parts: [{ text: reflectionPrompt }] }] as any, reflectionSI);
+Perform a focused session summary. Return ONLY a valid JSON object with these fields:
+
+1. "session_summary": A 2-3 sentence summary of the session's emotional arc FROM THE USER'S PERSPECTIVE. What did the user come in wanting? How did they respond? What was revealed? (English, 2-3 sentences)
+
+2. "user_observations": Observations derived STRICTLY from the user's own words and reactions. For each observation:
+   - "content": The observation in English
+   - "confidence": 0.0-1.0
+   - "user_quote": The exact user quote that supports this observation
+   
+CRITICAL RULES:
+- Analyze ONLY what the USER said. The reader's tarot interpretations are NOT evidence.
+- If the reader said "you have an ideal love image" but the user never confirmed this, DO NOT record it.
+- NEVER reference tarot cards, spreads, or card imagery (e.g. "three spilled cups", "Devil's chains"). Your observations must be card-independent.
+- If the user disagreed with the reader ("hayır yanılıyorsun"), record this as a genuine correction, NOT as a defense mechanism — unless you have very strong evidence otherwise.
+- Maximum 3 observations. Quality over quantity. Generic observations like "user seeks guidance" are REJECTED.
+- Each observation MUST include a direct user quote as evidence.`;
+
+    const reflectionSI = "You are a session analyst. Your job is to summarize what happened and extract observations from the USER's own words. You do NOT do schema analysis or diagnosis — that is handled by a separate system. Be precise, evidence-based, and conservative. Return ONLY valid JSON in English.";
+
+    const rawResult = await callGemini(
+      [{ role: "user", parts: [{ text: reflectionPrompt }] }] as any,
+      reflectionSI
+    );
 
     // Parse JSON response
     let reflection;
@@ -129,66 +153,50 @@ Deno.serve(async (req: Request) => {
 
     let observationsCreated = 0;
 
-    // Save as clinical observations (unified approach)
-    // Subtext summary → clinical observation (source='consolidation')
-    if (reflection.subtext_summary) {
-      console.log("=== REFLECTION: SUBTEXT SUMMARY ===\n", reflection.subtext_summary, "\n===================================");
-      const emb = await getEmbedding(reflection.subtext_summary);
-      await serviceClient.from("clinical_observations").insert({
+    // Save session summary
+    if (reflection.session_summary) {
+      console.log("=== SESSION SUMMARY ===\n", reflection.session_summary, "\n=======================");
+      const emb = await getEmbedding(reflection.session_summary);
+      const { error: insertErr } = await serviceClient.from("clinical_observations").insert({
         user_id: user.id, session_id,
-        content: reflection.subtext_summary, embedding: emb,
-        confidence: 0.7, source: "consolidation",
+        content: reflection.session_summary, embedding: emb,
+        confidence: 0.7, source: "session_reflection",
         tags: ["session_summary"],
       });
-      observationsCreated++;
+      if (insertErr) {
+        console.error("=== SESSION SUMMARY INSERT ERROR ===", insertErr.message);
+      } else {
+        observationsCreated++;
+      }
     }
 
-    // Active schemas → clinical observations with schema tags
-    if (reflection.active_schemas && Array.isArray(reflection.active_schemas)) {
-      console.log("=== REFLECTION: SCHEMAS ===");
-      for (const s of reflection.active_schemas) {
-        console.log(`Schema: ${s.schema} (Confidence: ${s.confidence})`);
-        const content = `Schema: ${s.schema} - ${s.evidence || ""}`;
+    // Save user-word observations (max 3)
+    if (reflection.user_observations && Array.isArray(reflection.user_observations)) {
+      console.log("=== USER-WORD OBSERVATIONS ===");
+      for (const obs of reflection.user_observations.slice(0, 3)) {
+        const content = obs.user_quote
+          ? `${obs.content} [User said: "${obs.user_quote}"]`
+          : obs.content;
+        console.log(`Observation: ${content} (confidence: ${obs.confidence})`);
         const emb = await getEmbedding(content);
-        await serviceClient.from("clinical_observations").insert({
+        const { error: obsErr } = await serviceClient.from("clinical_observations").insert({
           user_id: user.id, session_id,
-          content, embedding: emb, confidence: s.confidence || 0.5,
-          source: "consolidation",
-          tags: [s.schema.toLowerCase().replace(/\s+/g, "_"), "schema"],
+          content, embedding: emb,
+          confidence: obs.confidence || 0.5,
+          source: "session_reflection",
+          tags: ["user_observation"],
         });
-        observationsCreated++;
+        if (obsErr) {
+          console.error("=== OBSERVATION INSERT ERROR ===", obsErr.message);
+        } else {
+          observationsCreated++;
+        }
       }
-      console.log("===========================");
+      console.log("==============================");
     }
 
-    // Psychoanalytic insight → clinical observation
-    if (reflection.psychoanalytic_insight) {
-      const pi = reflection.psychoanalytic_insight;
-      console.log("=== REFLECTION: DEEP INSIGHT ===\n", JSON.stringify(pi, null, 2), "\n================================");
-      const deepContent = [
-        pi.core_belief_hypothesis ? `Core Belief: ${pi.core_belief_hypothesis}` : "",
-        pi.defense_mechanisms?.length > 0 ? `Defenses: ${pi.defense_mechanisms.join(", ")}` : "",
-        pi.deep_insight ? `Insight: ${pi.deep_insight}` : "",
-      ].filter(Boolean).join("\n");
-
-      if (deepContent) {
-        const tags = ["psychoanalytic"];
-        if (pi.defense_mechanisms) tags.push(...pi.defense_mechanisms.map((d: string) => d.toLowerCase().replace(/\s+/g, "_")));
-        if (pi.avoidance_areas) tags.push(...pi.avoidance_areas.map((a: string) => a.toLowerCase().replace(/\s+/g, "_")));
-
-        const emb = await getEmbedding(deepContent);
-        await serviceClient.from("clinical_observations").insert({
-          user_id: user.id, session_id,
-          content: deepContent, embedding: emb, confidence: 0.5,
-          source: "consolidation", tags,
-        });
-        observationsCreated++;
-      }
-    }
-
-    // NOTE: Profile consolidation is NOT done here.
-    // It is handled by tarot-reading's signal-based consolidation (≥5 unconsolidated signals).
-    // session-reflection only WRITES clinical observations. Profile updates happen separately.
+    // NOTE: NO schema analysis, NO psychoanalytic insight, NO core belief extraction.
+    // Those are handled exclusively by tarot-reading's signal-based consolidation.
 
     // Mark session as completed
     await serviceClient.from("sessions").update({
