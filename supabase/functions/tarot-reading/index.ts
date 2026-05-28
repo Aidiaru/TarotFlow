@@ -99,21 +99,26 @@ function drawCards(count = 5) {
   }));
 }
 
-async function callGemini(prompt: any, systemInstruction: string, attempt = 1): Promise<string> {
+async function callGemini(prompt: any, systemInstruction: string, isJson = false, attempt = 1): Promise<string> {
   const MAX_RETRIES = 3;
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
   try {
+    const generationConfig: any = { temperature: 0.9, topP: 0.95, maxOutputTokens: 4096 };
+    if (isJson) {
+      generationConfig.responseMimeType = "application/json";
+    }
+
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemInstruction }] },
           contents: prompt,
-          generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 4096 },
+          generationConfig,
         }),
       }
     );
@@ -134,7 +139,7 @@ async function callGemini(prompt: any, systemInstruction: string, attempt = 1): 
       const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
       console.log(`[Attempt ${attempt} failed] ${error.message}. Retrying in ${Math.round(delay)}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      return callGemini(prompt, systemInstruction, attempt + 1);
+      return callGemini(prompt, systemInstruction, isJson, attempt + 1);
     }
     if (isRetryable) {
       throw new Error("Tarot enerjileri şu an çok yoğun, lütfen birazdan tekrar dene.");
@@ -194,18 +199,34 @@ Deno.serve(async (req: Request) => {
     const { session_id, question, message_history } = await req.json();
     
     // ============================================================
-    // 1. INTENT CLASSIFICATION (Expanded: READING/CHAT/FEEDBACK)
+    // 1. SMART ACTION PLANNER (Intent 2.0)
     // ============================================================
-    let intent = "READING"; // default
+    let intent = "READING";
+    let plannerReasoning = "";
     if (question && question.trim().length > 0) {
       try {
-        const intentPrompt = [{ role: "user", parts: [{ text: `Message: "${question}"\n\nClassify this message into EXACTLY ONE of these categories:\n- READING: A new request for a tarot reading on a new topic\n- CHAT: A greeting, small talk, or follow-up question about a previous reading (e.g. "simplify", "explain")\n- FEEDBACK_POSITIVE: The user agrees with or validates the previous reading (e.g. "evet tam olarak bu", "çok doğru", "bunu hissediyorum", "so true")\n- FEEDBACK_NEGATIVE: The user disagrees with or rejects the previous reading (e.g. "hayır pek değil", "saçma", "I don't think so")\n\nAnswer with ONLY ONE WORD: READING, CHAT, FEEDBACK_POSITIVE, or FEEDBACK_NEGATIVE.` }] }];
-        const intentResponse = await callGemini(intentPrompt as any, "You are an intent classifier. Answer with ONLY ONE WORD.");
-        const cleaned = intentResponse.trim().toUpperCase().replace(/[^A-Z_]/g, "");
-        if (["READING", "CHAT", "FEEDBACK_POSITIVE", "FEEDBACK_NEGATIVE"].includes(cleaned)) {
-          intent = cleaned;
+        const historyText = (message_history || []).slice(-4).map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
+        const intentPrompt = [{ role: "user", parts: [{ text: `User Message: "${question}"
+Recent Chat History:
+${historyText}
+
+Determine the best action for the system to take.
+Options:
+1. "READING": The user wants a new reading, OR they asked a deep/difficult question (e.g., "what should I do now?", "why is this happening?", "how can I fix this?") that requires pulling NEW tarot cards to answer properly.
+2. "CHAT": The user is just making small talk, answering a clarification question you asked (e.g. "I am single", "I'm a student"), or asking a simple factual follow-up that does NOT need new cards.
+3. "FEEDBACK_POSITIVE": The user agrees with or validates the previous reading. This includes SUBTLE or TENTATIVE agreement (e.g. "evet tam olarak bu", "çok doğru", "galiba", "sanırım haklısın", "olabilir", "belki de").
+4. "FEEDBACK_NEGATIVE": The user disagrees with or rejects the previous reading (e.g. "hayır", "pek değil", "saçma").
+
+Return JSON: { "reasoning": "Why you chose this action", "intent": "READING" | "CHAT" | "FEEDBACK_POSITIVE" | "FEEDBACK_NEGATIVE" }` }] }];
+        
+        const intentResponse = await callGemini(intentPrompt as any, "You are an Action Planner orchestrating a tarot system. Return ONLY valid JSON.", true);
+        const parsedIntent = JSON.parse(intentResponse.replace(/```json\n?|\n?```/g, "").trim());
+        plannerReasoning = parsedIntent.reasoning || "";
+        console.log(`=== SMART PLANNER ===\nReasoning: ${plannerReasoning}\nIntent: ${parsedIntent.intent}\n=====================`);
+        
+        if (["READING", "CHAT", "FEEDBACK_POSITIVE", "FEEDBACK_NEGATIVE"].includes(parsedIntent.intent)) {
+          intent = parsedIntent.intent;
         }
-        console.log("=== INTENT ===", intent);
       } catch (e) { console.log("=== INTENT ERROR, defaulting to READING ===", e); }
     }
 
@@ -255,10 +276,11 @@ Deno.serve(async (req: Request) => {
     try {
       const { data: memories } = await serviceClient
         .from("user_memory")
-        .select("key, value")
-        .eq("user_id", user.id);
+        .select("key, value, updated_at")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: true });
       if (memories && memories.length > 0) {
-        userMemoryContext = "\n[USER FACTS]\n" + memories.map((m: any) => `${m.key}: ${m.value}`).join("\n") + "\n";
+        userMemoryContext = "\n[USER FACTS (Chronological Timeline)]\n" + memories.map((m: any) => `[${new Date(m.updated_at).toISOString().split('T')[0]}] ${m.key}: ${m.value}`).join("\n") + "\n";
         console.log("=== USER MEMORY ===\n", userMemoryContext, "\n====================");
       }
     } catch (e) { console.log("=== USER MEMORY ERROR ===", e); }
@@ -338,31 +360,28 @@ Deno.serve(async (req: Request) => {
     }
 
     // ============================================================
-    // 5. SYSTEM INSTRUCTION + GENERATION
+    // 5. SYSTEM INSTRUCTION + GENERATION (COGNITIVE ARCHITECTURE)
     // ============================================================
-    const systemInstruction = isConversational
-      ? `You are an ancient, wise tarot reader who has spent decades studying the Rider-Waite tradition. You have a deep, intuitive understanding of human nature.
-CRITICAL RULES:
-1. ALWAYS respond in the exact same language that the user used.
-2. The user is either greeting you, making small talk, OR asking a follow-up question/giving feedback about their previous reading (e.g. "simplify", "explain", "I don't understand").
-3. If they are asking about the previous reading or giving an instruction like "simplify", answer their question or fulfill their request based on the chat history. Maintain your wise tone but make sure you actually do what they asked.
-4. If it's just small talk or a greeting, warmly acknowledge it. Keep it concise.
-5. NEVER use psychological, clinical, or therapeutic terminology (e.g. "Jungian", "schema", "defense mechanism", "archetype", "projection", "transference", "cognitive", "psychoanalytic"). You are a tarot reader, NOT a therapist. Speak through the language of the cards, symbols, and metaphors — never through clinical jargon.
-${hiddenContext ? "\n" + hiddenContext : ""}`
-      : `You are a tarot reader. You use the Rider-Waite tradition and you speak naturally, in your own voice. You are wise but not theatrical.
+    const systemInstruction = `You are a master tarot reader with deep psychological intuition.
+
+You MUST return a JSON object:
+{
+  "internal_monologue": "Your PRIVATE analysis. Debate all traditional meanings of each card. Cross-reference with the user's psychological context. Think through which interpretation resonates most deeply. Use clinical terms freely here — the user never sees this.",
+  "tarot_angle": "Your chosen strategy in one sentence. E.g. 'User is single, so 3 of Swords = mental rigidity, not heartbreak.' Null if no cards.",
+  "clarification_question": "If you NEED vital context (relationship status for love, employment for career) to interpret accurately, write your question. Otherwise null.",
+  "final_output": "The ONLY text shown to the user. Must sound like a wise, warm tarot reader. NEVER a therapist."
+}
 
 RULES:
-1. ALWAYS respond in the same language the user used.
-2. NEVER use psychological or clinical terminology (e.g. "schema", "defense mechanism", "archetype", "projection", "cognitive", "psychoanalytic"). You are a tarot reader, not a therapist.
-3. DO NOT force [BACKGROUND CONTEXT] onto the current cards. Read the cards objectively first. Only use past context if the cards naturally point there.
+1. Respond in the user's language.
+2. internal_monologue is your scratchpad. Think deeply here. The user never sees it.
+3. final_output must NEVER contain: schema, defense mechanism, archetype, projection, cognitive, psychoanalytic, attachment style. You are a tarot reader.
+4. If cards were drawn: weave them into a rich narrative. End with "Kısacası:" (1-2 sentence direct answer) + ONE reflective question that makes the user think.
+5. If NO cards were drawn: speak directly, warmly, WITHOUT tarot imagery or card metaphors.
+6. If you lack vital context for accurate interpretation, use clarification_question.
+7. Respect user corrections unconditionally.
+${plannerReasoning ? `\n[ACTION PLANNER CONTEXT]\nDecision: ${intent}. Reasoning: "${plannerReasoning}"\n` : ""}${hiddenContext ? "\n" + hiddenContext : ""}`;
 
-HOW TO READ:
-4. First, briefly describe what you see in the cards — their imagery, their positions, what catches your eye. Keep this natural and concise, not overly poetic.
-5. Then, explain what these cards MEAN for the user's specific question. This is the most important part. Be direct, insightful, and honest. Don't sugarcoat but don't be needlessly harsh either.
-6. IMPORTANT: If the user corrects you or says "no, that's not how it is", RESPECT their correction. Adjust your interpretation. Do not insist on your original reading.
-7. End with "Kısacası:" — 1-2 clear sentences answering the user's question directly. No metaphors.
-8. After "Kısacası:", ask ONE reflective question that relates to the reading and invites the user to share something about themselves. Keep it natural.
-${hiddenContext ? "\n" + hiddenContext : ""}`;
 
     // Conversation context (Proper Gemini multi-turn format)
     let promptContents: any[] = [];
@@ -387,14 +406,33 @@ ${hiddenContext ? "\n" + hiddenContext : ""}`;
     });
 
     console.log("=== GEMINI API INPUT ===\nSYSTEM:", systemInstruction.substring(0, 300) + "...", "\n========================");
-    const reading = await callGemini(promptContents as any, systemInstruction);
+    const rawReading = await callGemini(promptContents as any, systemInstruction, true);
+
+    let readingText = "";
+    try {
+      // Gemini JSON output might include markdown code blocks, strip them
+      const cleanedJson = rawReading.replace(/^```json\n?/, "").replace(/```$/, "").trim();
+      const parsed = JSON.parse(cleanedJson);
+      readingText = parsed.final_output || "Anlayamadım, tekrar eder misin?";
+      console.log("=== COGNITIVE ARCHITECTURE LOGS ===");
+      console.log("INTERNAL MONOLOGUE:", parsed.internal_monologue);
+      console.log("TAROT ANGLE:", parsed.tarot_angle);
+      if (parsed.clarification_question) {
+        console.log("CLARIFICATION REQUIRED:", parsed.clarification_question);
+      }
+      console.log("===================================");
+    } catch(e) {
+      // CRITICAL: NEVER expose raw JSON to user — it contains internal_monologue with psychological analysis
+      console.error("=== COGNITIVE PARSE FAILURE ===", e, "Raw output:", rawReading);
+      readingText = "Kartların enerjisi şu an çok yoğun, bir nefes alıp tekrar deneyelim mi? ✨";
+    }
 
     // Save
     if (cards.length > 0) {
       await serviceClient.from("card_draws").insert({ session_id, user_id: user.id, cards, question: question || null });
     }
     const { data: savedMessage } = await serviceClient.from("messages")
-      .insert({ session_id, user_id: user.id, role: "assistant", content: reading, metadata: { cards } })
+      .insert({ session_id, user_id: user.id, role: "assistant", content: readingText, metadata: { cards } })
       .select().single();
 
     // ============================================================
@@ -417,86 +455,105 @@ ${hiddenContext ? "\n" + hiddenContext : ""}`;
         if (intent === "READING") {
           gatePromptText = `User's message: "${question}"
 
-Does this message contain psychologically meaningful content — emotional disclosure, relationship dynamics, fears, desires, coping patterns, identity struggles, or reactions to life events?
+Analyze this message on TWO levels:
 
-If YES: Extract the psychological substance in 1-2 sentences in English. Focus on what this reveals about the PERSON, not about their question topic.
-Include "event_context" if a real-world event is mentioned (e.g. "graduation", "job application", "breakup").
-Include "facts" if the user reveals demographic/factual information (e.g. age, job, relationship status, life events).
+SURFACE: What is the user explicitly saying or asking?
+SUBTEXT: What does their choice of topic, phrasing, tone, brevity, or eagerness reveal? A terse "aşk falı bak" vs a vulnerable "aşk hayatım hakkında yardıma ihtiyacım var" tells very different stories.
 
-If NO: Return {"signal": "NO_SIGNAL"}
+IMPORTANT CONTEXT: This is a TAROT APP. Asking about the future, wanting predictions, seeking guidance — these are BASELINE behaviors. They are NOT psychological signals by themselves. A signal is something that reveals THIS person's inner world beyond what any generic tarot user would do.
 
-Return JSON: {"signal": "..." or "NO_SIGNAL", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
+If there is psychological substance (surface OR subtext): Write a 1-2 sentence observation in English. DESCRIBE the behavior without clinical labels. Do NOT say "externalization" or "defense mechanism" — just describe what happened.
+If there is nothing beyond baseline tarot usage: Return {"signal": "NO_SIGNAL"}
+
+Include "event_context" for real-world events (graduation, breakup, job change).
+Include "facts" for demographic data (age, job, relationship status).
+
+Return JSON: {"signal": "..." or "NO_SIGNAL", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
         } else if (intent === "FEEDBACK_POSITIVE" || intent === "FEEDBACK_NEGATIVE") {
           gatePromptText = `User's message: "${question}"
 
-The user is responding to this tarot reading:
-"${lastAssistantMsg.substring(0, 500)}"
+The reader's LAST message contained these claims:
+"${lastAssistantMsg.substring(0, 600)}"
 
-The user ${intent === "FEEDBACK_POSITIVE" ? "AGREES with" : "DISAGREES with"} the reading.
+The user ${intent === "FEEDBACK_POSITIVE" ? "AGREES" : "DISAGREES"}.
 
-Analyze what this ${intent === "FEEDBACK_POSITIVE" ? "agreement" : "disagreement"} reveals about the user:
-- If they AGREE: What specifically resonated with them? What does their agreement tell us about their self-perception?
-- If they DISAGREE: Take their disagreement at face value FIRST. It may be a genuine correction. Only consider it a defense mechanism if there is strong contradictory evidence from their other statements in the same session.
+YOUR TASK: Record SPECIFICALLY which claim was ${intent === "FEEDBACK_POSITIVE" ? "confirmed" : "rejected"}, and WHAT this reveals.
 
-CRITICAL: Your observation must be about what the USER revealed, NOT about what the reader said.
-Quote the user's exact words as evidence.
+BAD observation: "The user agreed with the reading" ← USELESS. Tells us nothing.
+BAD observation: "The user acknowledged the possibility" ← USELESS. What possibility?
+GOOD observation: "User tentatively confirmed ('galiba') that they fear letting someone into their life will disrupt their personal peace" ← SPECIFIC and VALUABLE.
 
-Return JSON: {"signal": "..." or "NO_SIGNAL", "event_context": null, "facts": []}`;
+${intent === "FEEDBACK_NEGATIVE" ? `CRITICAL: Take their disagreement at FACE VALUE first. "Hayır yanılıyorsun" might be a genuine correction, NOT a defense mechanism. Only note it as potentially defensive if there is STRONG contradictory evidence from the user's own words elsewhere in this session. If you cannot determine which, describe the disagreement neutrally without labeling it.` : `Even tentative, half-hearted agreement ("galiba", "sanırım", "olabilir") is valuable. These hedged confirmations often reveal MORE than enthusiastic agreement — they suggest the user recognizes truth but finds it uncomfortable.`}
+
+Also note BEHAVIORAL SEQUENCES: If the user acknowledged something uncomfortable and then IMMEDIATELY pivoted to a different topic, note the sequence without labeling it. Example: "After tentatively accepting [X], user immediately pivoted to asking about future romantic prospects. This sequence is noted." Do NOT label this as externalization or avoidance — in a tarot context, asking about the future is baseline behavior. The sequence may or may not be significant; consolidation will determine that with more evidence.
+
+Return JSON: {"signal": "...", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": null, "facts": []}`;
         } else { // CHAT
           gatePromptText = `User's message: "${question}"
+${lastAssistantMsg ? `\nThe reader's last message was:\n"${lastAssistantMsg.substring(0, 400)}"\n` : ""}
+This is a conversational message. Analyze it for:
 
-This is a casual/conversational message. Does it contain any self-disclosure, personal facts, or psychologically meaningful content?
+1. SELF-DISCLOSURE: Personal facts, life events, emotional states. Even brief factual answers ("bekarım", "öğrenciyim") are valuable data points.
+2. SUBTEXT: HOW they say it matters. Brevity, deflection, elaboration, tone shifts. If the reader asked a deep question and the user gave a one-word answer, that brevity itself may be notable.
+3. FACTS: age, job, relationship status, life circumstances → extract into facts array.
 
-Look for: personal revelations, life facts (age, job, status), emotional statements, or implicit psychological material.
+CONTEXT: This is a TAROT APP. Asking about the future is baseline, not a signal. Focus on what's UNIQUE to this person.
 
-If YES: Extract the substance.
-If NO: Return {"signal": "NO_SIGNAL"}
+If nothing meaningful: Return {"signal": "NO_SIGNAL"}
 
-Return JSON: {"signal": "..." or "NO_SIGNAL", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
+Return JSON: {"signal": "..." or "NO_SIGNAL", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
         }
 
         const gateResponse = await callGemini(
           [{ role: "user", parts: [{ text: gatePromptText }] }],
-          `You are a clinical observation extractor. Return ONLY valid JSON.
-CRITICAL RULES:
-1. Analyze ONLY what the USER said, never what the tarot reader said.
-2. Your observation must be SPECIFIC to this user. Generic observations like "The user seeks guidance" or "The user is curious about their future" are REJECTED — they apply to anyone using a tarot app.
-3. NEVER reference tarot cards, card names, or card imagery in your observation. Write as if you've never seen a tarot card.
-4. Quote the user's exact words when possible.
-5. If the user disagrees with the reader, record it as genuine disagreement unless you have strong evidence it's defensive.
-6. Extract factual information (age, job, relationship status, life events) into the "facts" array separately from psychological observations.`
+          `You are a behavioral observer performing clinical-grade observation. Return ONLY valid JSON.
+
+PHILOSOPHY: You DESCRIBE behavior, you do NOT DIAGNOSE. You are a camera with insight, not a judge.
+
+RULES:
+1. Analyze ONLY the USER's words and behavior. Never analyze the tarot reader's output.
+2. Your observations must be SPECIFIC to THIS user. "The user seeks guidance" is GARBAGE — it applies to everyone. REJECTED.
+3. NEVER reference tarot cards or imagery. Write as if you've never seen a tarot card.
+4. Read SUBTEXT: HOW someone says something is as valuable as WHAT they say. Brevity, sarcasm, deflection, pivots — these are gold.
+5. NEVER use clinical labels prematurely (no "externalization", "avoidance", "defense mechanism"). DESCRIBE the behavior sequence and let pattern analysis handle labeling.
+6. Quote the user's exact words as evidence.
+7. Extract facts (age, job, relationship status) into the "facts" array.
+8. When a user gives feedback (agrees/disagrees), record WHAT SPECIFIC CLAIM they responded to.
+9. DYNAMIC CONFIDENCE: Assign a 'confidence' score between 0.1 and 1.0 to your signal. A tentative "galiba" (I guess) = 0.3. An explicit, enthusiastic agreement or a very direct self-disclosure = 0.9. Score based on the STRENGTH of the user's expression.`
         );
 
         try {
           const gateData = JSON.parse(gateResponse.replace(/```json\n?|\n?```/g, "").trim());
+          
+          // PHASE D: Save facts REGARDLESS of the psychological signal
+          if (gateData.facts && Array.isArray(gateData.facts) && gateData.facts.length > 0) {
+            for (const fact of gateData.facts) {
+              if (fact.key && fact.value) {
+                try {
+                  await serviceClient.from("user_memory").insert({ // Insert instead of upsert for chronological history
+                    user_id: user.id,
+                    key: fact.key,
+                    value: fact.value,
+                    source: fact.source || null,
+                    updated_at: new Date().toISOString(),
+                  });
+                  console.log(`=== USER MEMORY SAVED (Chronological): ${fact.key} = ${fact.value} ===`);
+                } catch (e) { console.log("=== USER MEMORY SAVE ERROR ===", e); }
+              }
+            }
+          }
+
+          // PHASE A: Psychological Signal Extraction
           if (gateData.signal && gateData.signal !== "NO_SIGNAL") {
             console.log("=== PSYCHOLOGICAL GATE: SIGNAL DETECTED ===\n", gateData, "\n=============================================");
             const embedding = await getEmbedding(gateData.signal);
             const { error: gateInsertErr } = await serviceClient.from("clinical_observations").insert({
               user_id: user.id, session_id,
-              content: gateData.signal, embedding, confidence: 0.5,
+              content: gateData.signal, embedding, confidence: gateData.confidence || 0.5,
               event_context: gateData.event_context || null,
               source: "gate", is_consolidated: false,
             });
             if (gateInsertErr) console.error("=== GATE INSERT ERROR ===", gateInsertErr.message);
-
-            // Save facts to user_memory (Phase D)
-            if (gateData.facts && Array.isArray(gateData.facts) && gateData.facts.length > 0) {
-              for (const fact of gateData.facts) {
-                if (fact.key && fact.value) {
-                  try {
-                    await serviceClient.from("user_memory").upsert({
-                      user_id: user.id,
-                      key: fact.key,
-                      value: fact.value,
-                      source: fact.source || null,
-                      updated_at: new Date().toISOString(),
-                    }, { onConflict: "user_id,key" });
-                    console.log(`=== USER MEMORY SAVED: ${fact.key} = ${fact.value} ===`);
-                  } catch (e) { console.log("=== USER MEMORY SAVE ERROR ===", e); }
-                }
-              }
-            }
           } else {
             console.log("=== PSYCHOLOGICAL GATE: NO SIGNAL ===");
           }
@@ -520,11 +577,24 @@ CRITICAL RULES:
 
         const { data: signals } = await serviceClient
           .from("clinical_observations")
-          .select("id, content, event_context, confidence")
+          .select("id, content, event_context, confidence, created_at")
           .eq("user_id", user.id)
           .eq("source", "gate")
           .eq("is_consolidated", false)
           .order("created_at", { ascending: true });
+
+        // V6: Fetch historical signals for cross-session pattern recognition
+        const { data: historicalSignals } = await serviceClient
+          .from("clinical_observations")
+          .select("id, content, event_context, confidence, created_at")
+          .eq("user_id", user.id)
+          .eq("source", "gate")
+          .eq("is_consolidated", true)
+          .order("created_at", { ascending: false })
+          .limit(15);
+        
+        // Reverse so they are in chronological order
+        const sortedHistorical = (historicalSignals || []).reverse();
 
         const { data: currentProfile } = await serviceClient
           .from("user_profile_cards")
@@ -532,9 +602,14 @@ CRITICAL RULES:
           .eq("user_id", user.id)
           .maybeSingle();
 
-        const signalList = (signals || []).map((s: any, i: number) => 
-          `${i + 1}. ${s.content}${s.event_context ? ` [Context: ${s.event_context}]` : ""} (confidence: ${s.confidence})`
-        ).join("\n");
+        const formatSignal = (s: any, i: number) => 
+          `${i + 1}. [${new Date(s.created_at).toISOString().split('T')[0]}] ${s.content}${s.event_context ? ` [Context: ${s.event_context}]` : ""} (confidence: ${s.confidence})`;
+
+        const historicalList = sortedHistorical.length > 0 
+          ? sortedHistorical.map(formatSignal).join("\n") 
+          : "No historical observations.";
+          
+        const signalList = (signals || []).map(formatSignal).join("\n");
 
         const currentProfileStr = currentProfile 
           ? `Core Belief: ${currentProfile.core_belief_hypothesis || "None"}\nSchemas: ${JSON.stringify(currentProfile.dominant_schemas || [])}\nDefenses: ${(currentProfile.dominant_defenses || []).join(", ") || "None"}\nNarrative: ${currentProfile.narrative || "None"}`
@@ -543,7 +618,10 @@ CRITICAL RULES:
         const consolidationPrompt = `CURRENT USER PROFILE:
 ${currentProfileStr}
 
-NEW OBSERVATIONS FROM THE USER'S OWN WORDS (since last consolidation):
+HISTORICAL OBSERVATIONS (Past sessions):
+${historicalList}
+
+NEW OBSERVATIONS (Since last consolidation):
 ${signalList}
 
 CRITICAL RULES:
@@ -551,22 +629,23 @@ CRITICAL RULES:
 2. If any observation says "The reader identifies..." or "The cards show..." — this is contamination from the tarot reader's narrative. IGNORE IT completely.
 3. Every hypothesis MUST be supported by what the user themselves expressed. Quote or reference the user's own words.
 4. NEVER reference tarot cards, spreads, or card imagery in your analysis.
+5. CROSS-SESSION PATTERNS: Look for behavioral sequences that repeat across both historical and new observations.
 
 SCHEMA DISCIPLINE:
 - Your PRIMARY job is to CONFIRM or CHALLENGE existing schemas based on new evidence.
-- Extract a new schema ONLY IF there is overwhelming, explicit evidence in the user's words. Do NOT hallucinate or over-analyze.
-- You may extract multiple schemas if, and only if, the evidence strongly warrants it.
+- Extract a new schema ONLY IF there is overwhelming, explicit evidence in the user's words, preferably repeating across sessions.
 - A schema should NOT reach confidence > 0.6 unless supported by evidence from at least 2 different sessions.
 - If you cannot find strong evidence, "No new schema detected" is a valid and preferred output.
 - Do NOT force observations into schema categories. If a pattern doesn't fit a known schema, describe it freely.
 
 Return a JSON object with:
-1. "confirmed": Existing hypotheses SUPPORTED by new evidence. [{"hypothesis": "...", "new_confidence": 0.x, "reason": "..."}]
-2. "challenged": Existing hypotheses CONTRADICTED. [{"hypothesis": "...", "new_confidence": 0.x, "reason": "..."}]
-3. "new_hypotheses": Newly detected patterns based ONLY on strong evidence. [{"hypothesis": "...", "confidence": 0.3, "evidence": "user's own words"}]
-4. "updated_core_belief": Updated core belief (1 sentence, English). Must be grounded in what the user actually said.
-5. "updated_defenses": Updated defense mechanisms list (English).
-6. "updated_narrative": Updated narrative (2-3 sentences, English). Must reference the user's actual statements.
+1. "internal_monologue": Your thought pipeline. Discuss cross-session patterns, weigh evidence for/against existing schemas, and debate if a new schema is justified.
+2. "confirmed": Existing hypotheses SUPPORTED by new evidence. [{"hypothesis": "...", "new_confidence": 0.x, "reason": "..."}]
+3. "challenged": Existing hypotheses CONTRADICTED. [{"hypothesis": "...", "new_confidence": 0.x, "reason": "..."}]
+4. "new_hypotheses": Newly detected patterns based ONLY on strong evidence. [{"hypothesis": "...", "confidence": 0.3, "evidence": "user's own words"}]
+5. "updated_core_belief": Updated core belief (1 sentence, English). Must be grounded in what the user actually said.
+6. "updated_defenses": Updated defense mechanisms list (English).
+7. "updated_narrative": Updated narrative (2-3 sentences, English). Must reference the user's actual statements.
 
 Return ONLY valid JSON.`;
 
@@ -599,11 +678,22 @@ Return ONLY valid JSON.`;
             if (consInsertErr) console.error("=== CONSOLIDATION INSERT ERROR ===", consInsertErr.message);
           }
 
-          // Update profile card (FIXED: always updates, includes all confirmed + new schemas)
+          // Update profile card — V5: challenged schemas are REMOVED from profile
+          const challengedNames = new Set((consData.challenged || []).map((h: any) => (h.hypothesis || "").toLowerCase()));
+          
+          // Keep old schemas that weren't challenged
+          const survivingOldSchemas = (currentProfile?.dominant_schemas || [])
+            .filter((s: any) => !challengedNames.has((s.schema || "").toLowerCase()));
+          
+          // Build new schema list: surviving old + confirmed (with updated confidence) + new
+          const confirmedMap = new Map((consData.confirmed || []).map((h: any) => [h.hypothesis?.toLowerCase(), h.new_confidence]));
           const updatedSchemas = [
-            ...(consData.confirmed || []).map((h: any) => ({ schema: h.hypothesis, confidence: h.new_confidence })),
+            ...survivingOldSchemas.map((s: any) => ({
+              schema: s.schema,
+              confidence: confirmedMap.has(s.schema?.toLowerCase()) ? confirmedMap.get(s.schema?.toLowerCase()) : s.confidence,
+            })),
             ...(consData.new_hypotheses || []).map((h: any) => ({ schema: h.hypothesis, confidence: h.confidence })),
-          ].filter(s => (s.confidence || 0) > 0.3);
+          ].filter(s => (s.confidence || 0) > 0.2);
 
           const narrativeForEmbed = consData.updated_narrative || currentProfile?.narrative || "";
           const profileEmbed = narrativeForEmbed ? await getEmbedding(narrativeForEmbed) : [];
@@ -612,7 +702,7 @@ Return ONLY valid JSON.`;
             user_id: user.id,
             core_belief_hypothesis: consData.updated_core_belief || currentProfile?.core_belief_hypothesis,
             dominant_defenses: consData.updated_defenses || currentProfile?.dominant_defenses || [],
-            dominant_schemas: updatedSchemas.length > 0 ? updatedSchemas : (currentProfile?.dominant_schemas || []),
+            dominant_schemas: updatedSchemas,
             narrative: consData.updated_narrative || currentProfile?.narrative,
             embedding: profileEmbed.length > 0 ? profileEmbed : (currentProfile?.embedding || []),
             session_count: (currentProfile?.session_count || 0) + 1,
@@ -620,7 +710,7 @@ Return ONLY valid JSON.`;
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id" });
 
-          console.log(`=== PROFILE CARD UPDATED: session_count → ${(currentProfile?.session_count || 0) + 1} ===`);
+          console.log(`=== PROFILE CARD UPDATED ===\nSchemas: ${updatedSchemas.length} (${challengedNames.size} challenged removed)\nConsolidation #${(currentProfile?.session_count || 0) + 1}\n============================`);
 
           // Mark signals as consolidated
           const signalIds = (signals || []).map((s: any) => s.id);
@@ -635,7 +725,7 @@ Return ONLY valid JSON.`;
       }
     } catch (e) { console.log("=== CONSOLIDATION ERROR ===\n", e); }
 
-    return new Response(JSON.stringify({ reading, cards, message_id: savedMessage?.id || null }),
+    return new Response(JSON.stringify({ reading: readingText, cards, message_id: savedMessage?.id || null }),
       { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     console.error("FATAL:", (error as Error).message);

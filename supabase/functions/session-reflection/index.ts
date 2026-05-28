@@ -110,31 +110,23 @@ Deno.serve(async (req: Request) => {
     // REDUCED SCOPE: Session Summary + User-Word Observations ONLY
     // Schema analysis, core beliefs, and defense mechanisms are
     // handled EXCLUSIVELY by tarot-reading's signal-based consolidation.
-    // ============================================================
+    // ===========================================================
     const reflectionPrompt = `SESSION CONVERSATION:
 ${fullConversation}
 
 USER'S OWN WORDS (extracted for your focus):
 ${userMessages.map((m: string, i: number) => `${i + 1}. "${m}"`).join("\n")}
 
-Perform a focused session summary. Return ONLY a valid JSON object with these fields:
+Write a 2-3 sentence summary of this session's emotional arc FROM THE USER'S PERSPECTIVE. What did the user come in wanting? How did they respond to the readings? What was revealed about their emotional state?
 
-1. "session_summary": A 2-3 sentence summary of the session's emotional arc FROM THE USER'S PERSPECTIVE. What did the user come in wanting? How did they respond? What was revealed? (English, 2-3 sentences)
+RULES:
+- Focus on the USER's journey, not the reader's interpretations.
+- Write in English.
+- Do NOT analyze or diagnose. Just summarize what happened.
 
-2. "user_observations": Observations derived STRICTLY from the user's own words and reactions. For each observation:
-   - "content": The observation in English
-   - "confidence": 0.0-1.0
-   - "user_quote": The exact user quote that supports this observation
-   
-CRITICAL RULES:
-- Analyze ONLY what the USER said. The reader's tarot interpretations are NOT evidence.
-- If the reader said "you have an ideal love image" but the user never confirmed this, DO NOT record it.
-- NEVER reference tarot cards, spreads, or card imagery (e.g. "three spilled cups", "Devil's chains"). Your observations must be card-independent.
-- If the user disagreed with the reader ("hayır yanılıyorsun"), record this as a genuine correction, NOT as a defense mechanism — unless you have very strong evidence otherwise.
-- Maximum 3 observations. Quality over quantity. Generic observations like "user seeks guidance" are REJECTED.
-- Each observation MUST include a direct user quote as evidence.`;
+Return JSON: { "session_summary": "..." }`;
 
-    const reflectionSI = "You are a session analyst. Your job is to summarize what happened and extract observations from the USER's own words. You do NOT do schema analysis or diagnosis — that is handled by a separate system. Be precise, evidence-based, and conservative. Return ONLY valid JSON in English.";
+    const reflectionSI = "You are a session summarizer. Your ONLY job is to write a brief, factual summary of what happened in the session from the user's perspective. You do NOT do schema analysis, diagnosis, or clinical observation — those are handled by a separate real-time system. Return ONLY valid JSON in English.";
 
     const rawResult = await callGemini(
       [{ role: "user", parts: [{ text: reflectionPrompt }] }] as any,
@@ -153,14 +145,14 @@ CRITICAL RULES:
 
     let observationsCreated = 0;
 
-    // Save session summary
+    // Save session summary (the ONLY thing session-reflection writes)
     if (reflection.session_summary) {
       console.log("=== SESSION SUMMARY ===\n", reflection.session_summary, "\n=======================");
       const emb = await getEmbedding(reflection.session_summary);
       const { error: insertErr } = await serviceClient.from("clinical_observations").insert({
         user_id: user.id, session_id,
         content: reflection.session_summary, embedding: emb,
-        confidence: 0.7, source: "session_reflection",
+        confidence: 0.5, source: "session_reflection",
         tags: ["session_summary"],
       });
       if (insertErr) {
@@ -170,30 +162,11 @@ CRITICAL RULES:
       }
     }
 
-    // Save user-word observations (max 3)
-    if (reflection.user_observations && Array.isArray(reflection.user_observations)) {
-      console.log("=== USER-WORD OBSERVATIONS ===");
-      for (const obs of reflection.user_observations.slice(0, 3)) {
-        const content = obs.user_quote
-          ? `${obs.content} [User said: "${obs.user_quote}"]`
-          : obs.content;
-        console.log(`Observation: ${content} (confidence: ${obs.confidence})`);
-        const emb = await getEmbedding(content);
-        const { error: obsErr } = await serviceClient.from("clinical_observations").insert({
-          user_id: user.id, session_id,
-          content, embedding: emb,
-          confidence: obs.confidence || 0.5,
-          source: "session_reflection",
-          tags: ["user_observation"],
-        });
-        if (obsErr) {
-          console.error("=== OBSERVATION INSERT ERROR ===", obsErr.message);
-        } else {
-          observationsCreated++;
-        }
-      }
-      console.log("==============================");
-    }
+    // NOTE: User-word observations are handled EXCLUSIVELY by the real-time
+    // Psychological Gate in tarot-reading. Session reflection does NOT write
+    // individual observations — this prevents duplicate data and eliminates
+    // the problem of session-reflection recording the bot's narrative as
+    // user observations with inflated confidence values.
 
     // NOTE: NO schema analysis, NO psychoanalytic insight, NO core belief extraction.
     // Those are handled exclusively by tarot-reading's signal-based consolidation.
