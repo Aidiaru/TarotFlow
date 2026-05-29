@@ -174,12 +174,21 @@ async function getEmbedding(text: string): Promise<number[]> {
   return data.embedding?.values ?? [];
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No auth" }), {
-        status: 401, headers: { "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -192,7 +201,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -726,10 +735,10 @@ Return ONLY valid JSON.`;
     } catch (e) { console.log("=== CONSOLIDATION ERROR ===\n", e); }
 
     return new Response(JSON.stringify({ reading: readingText, cards, message_id: savedMessage?.id || null }),
-      { headers: { "Content-Type": "application/json" } });
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     console.error("FATAL:", (error as Error).message);
     return new Response(JSON.stringify({ error: (error as Error).message }),
-      { status: 500, headers: { "Content-Type": "application/json" } });
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
