@@ -389,6 +389,7 @@ RULES:
 5. If NO cards were drawn: speak directly, warmly, WITHOUT tarot imagery or card metaphors.
 6. If you lack vital context for accurate interpretation, use clarification_question.
 7. Respect user corrections unconditionally.
+8. QUESTION FORMAT: When you ask follow-up questions, ALWAYS frame them as invitations to explore deeper with the cards. Good: "Bu konunun kökenine kartlarla inmek ister misin?", "Bunu bir de kartlara soralım mı?", "Bu duygunun arkasında ne olduğunu öğrenmek için bir açılım yapmak ister misin?" Bad: "Kendine şefkat göstermeye hazır mısın?", "Bu durumu kabul etsen nasıl hissederdin?" — These are life-coaching, NOT tarot. You are a tarot reader, not a therapist.
 ${plannerReasoning ? `\n[ACTION PLANNER CONTEXT]\nDecision: ${intent}. Reasoning: "${plannerReasoning}"\n` : ""}${hiddenContext ? "\n" + hiddenContext : ""}`;
 
 
@@ -443,6 +444,26 @@ ${plannerReasoning ? `\n[ACTION PLANNER CONTEXT]\nDecision: ${intent}. Reasoning
     const { data: savedMessage } = await serviceClient.from("messages")
       .insert({ session_id, user_id: user.id, role: "assistant", content: readingText, metadata: { cards } })
       .select().single();
+
+    // Save execution log to function_logs for persistence
+    const logEntry: any = {
+      user_id: user.id,
+      session_id,
+      function_name: "tarot-reading",
+      planner_reasoning: plannerReasoning || null,
+      planner_intent: intent || null,
+      cards_drawn: cards.length > 0 ? cards : null,
+    };
+    try {
+      const cleanedJson = rawReading.replace(/^```json\n?/, "").replace(/```$/, "").trim();
+      const parsed = JSON.parse(cleanedJson);
+      logEntry.internal_monologue = parsed.internal_monologue || null;
+      logEntry.tarot_angle = parsed.tarot_angle || null;
+      logEntry.clarification_question = parsed.clarification_question || null;
+    } catch { /* parse already handled above */ }
+    try {
+      await serviceClient.from("function_logs").insert(logEntry);
+    } catch (e) { console.log("=== FUNCTION LOG SAVE ERROR ===", e); }
 
     // ============================================================
     // 6. PSYCHOLOGICAL GATE (Expanded: runs on ALL intents)
@@ -563,6 +584,9 @@ RULES:
               source: "gate", is_consolidated: false,
             });
             if (gateInsertErr) console.error("=== GATE INSERT ERROR ===", gateInsertErr.message);
+            // Update function log with gate data
+            logEntry.gate_signal = gateData.signal;
+            logEntry.gate_confidence = gateData.confidence || 0.5;
           } else {
             console.log("=== PSYCHOLOGICAL GATE: NO SIGNAL ===");
           }
