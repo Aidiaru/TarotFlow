@@ -104,7 +104,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         const code = url.searchParams.get('code');
 
         if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          // IMPORTANT: codeVerifier MUST be passed here, otherwise the PKCE check fails
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code, codeVerifier);
           if (exchangeError) return { error: exchangeError as Error };
         }
       }

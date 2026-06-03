@@ -44,11 +44,22 @@ export async function endSession(sessionId: string): Promise<void> {
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  // Delete all related data first
-  await supabase.from('clinical_observations').delete().eq('session_id', sessionId);
-  await supabase.from('card_draws').delete().eq('session_id', sessionId);
-  await supabase.from('messages').delete().eq('session_id', sessionId);
-  const { error } = await supabase.from('sessions').delete().eq('id', sessionId);
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) throw new Error("Unauthorized");
+
+  // Validate ownership and delete all related data first
+  const userId = userData.user.id;
+  
+  const { error: obsError } = await supabase.from('clinical_observations').delete().eq('session_id', sessionId).eq('user_id', userId);
+  if (obsError) throw obsError;
+
+  const { error: cardsError } = await supabase.from('card_draws').delete().eq('session_id', sessionId).eq('user_id', userId);
+  if (cardsError) throw cardsError;
+
+  const { error: msgError } = await supabase.from('messages').delete().eq('session_id', sessionId).eq('user_id', userId);
+  if (msgError) throw msgError;
+
+  const { error } = await supabase.from('sessions').delete().eq('id', sessionId).eq('user_id', userId);
   if (error) throw error;
 }
 

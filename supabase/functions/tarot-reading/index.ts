@@ -323,15 +323,19 @@ Return JSON: { "reasoning": "Why you chose this action", "intent": "READING" | "
         try {
           cardThemes = JSON.parse(themeResponse.replace(/```json\n?|\n?```/g, "").trim());
           console.log("=== CARD THEMES ===", cardThemes, "\n===================");
+          logEntry.card_themes = cardThemes;
         } catch { console.log("=== CARD THEME PARSE ERROR, raw:", themeResponse); }
 
         if (cardThemes.length > 0) {
           const themeQuery = cardThemes.join(", ");
           console.log("=== CARD-DRIVEN RAG: STAGE 2 — SEARCHING WITH THEMES ===");
           const themeEmbedding = await getEmbedding(themeQuery);
-          const { data: observations } = await serviceClient.rpc("search_clinical_observations", {
-            p_user_id: user.id, p_embedding: themeEmbedding, p_match_count: 3, p_match_threshold: 0.5, p_min_confidence: 0.4,
+          const { data: observations, error: ragError } = await serviceClient.rpc("search_clinical_observations", {
+            p_user_id: user.id, p_embedding: themeEmbedding, p_match_count: 5, p_match_threshold: 0.45, p_min_confidence: 0.3,
           });
+          if (ragError) {
+            console.error("=== RAG RPC ERROR ===", ragError);
+          }
           if (observations && observations.length > 0) {
             relevantInsights = observations.map((o: any) => o.content);
             logEntry.rag_results = relevantInsights;
