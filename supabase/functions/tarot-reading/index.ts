@@ -242,6 +242,15 @@ Return JSON: { "reasoning": "Why you chose this action", "intent": "READING" | "
     const isConversational = intent === "CHAT" || intent === "FEEDBACK_POSITIVE" || intent === "FEEDBACK_NEGATIVE";
     const cards = isConversational ? [] : drawCards(5);
 
+    const logEntry: any = {
+      user_id: user.id,
+      session_id,
+      function_name: "tarot-reading",
+      planner_reasoning: plannerReasoning || null,
+      planner_intent: intent || null,
+      cards_drawn: cards.length > 0 ? cards : null,
+    };
+
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -306,8 +315,8 @@ Return JSON: { "reasoning": "Why you chose this action", "intent": "READING" | "
       if (cards.length > 0) {
         console.log("=== CARD-DRIVEN RAG: STAGE 1 — THEME EXTRACTION ===");
         const themeResponse = await callGemini(
-          [{ role: "user", parts: [{ text: `Tarot cards drawn:\n${cardDesc}\n\nExtract 3-5 themes these cards represent together. Include BOTH deep psychological archetypes (e.g., "fear of abandonment", "erosion of personal authority") AND literal life situations they might point to (e.g., "career transition", "relational conflict").\nReturn ONLY a JSON array of strings.` }] }],
-          "You are a master of translating esoteric tarot symbolism into clinical psychology and human experience. Return ONLY a valid JSON array of theme strings in English."
+          [{ role: "user", parts: [{ text: `Tarot cards drawn:\n${cardDesc}\n\nExtract 3-5 themes these cards represent together. For EACH theme, include BOTH:\n1. The deep psychological archetype (e.g., "fear of abandonment")\n2. Its CONCRETE behavioral manifestation — how this theme shows up in real daily life (e.g., "avoiding phone calls from family", "refusing to commit to plans", "withdrawing emotionally after conflict")\n\nExample output: ["Fear of abandonment manifested as emotional withdrawal from close relationships and reluctance to depend on others", "Career transition anxiety expressed through overthinking, procrastination, or seeking constant external validation"]\n\nReturn ONLY a JSON array of strings.` }] }],
+          "You are a master of translating esoteric tarot symbolism into clinical psychology and human experience. Return ONLY a valid JSON array of theme strings in English. Each theme MUST include both the abstract concept AND its concrete real-life behavioral equivalent."
         );
 
         let cardThemes: string[] = [];
@@ -325,6 +334,7 @@ Return JSON: { "reasoning": "Why you chose this action", "intent": "READING" | "
           });
           if (observations && observations.length > 0) {
             relevantInsights = observations.map((o: any) => o.content);
+            logEntry.rag_results = relevantInsights;
             console.log("=== RAG: FOUND OBSERVATIONS ===\n", relevantInsights.join("\n"), "\n===============================");
           } else {
             console.log("=== RAG: NO RELEVANT OBSERVATIONS FOUND ===");
@@ -424,6 +434,9 @@ ${plannerReasoning ? `\n[ACTION PLANNER CONTEXT]\nDecision: ${intent}. Reasoning
       const cleanedJson = rawReading.replace(/^```json\n?/, "").replace(/```$/, "").trim();
       const parsed = JSON.parse(cleanedJson);
       readingText = parsed.final_output || "Anlayamadım, tekrar eder misin?";
+      logEntry.internal_monologue = parsed.internal_monologue || null;
+      logEntry.tarot_angle = parsed.tarot_angle || null;
+      logEntry.clarification_question = parsed.clarification_question || null;
       console.log("=== COGNITIVE ARCHITECTURE LOGS ===");
       console.log("INTERNAL MONOLOGUE:", parsed.internal_monologue);
       console.log("TAROT ANGLE:", parsed.tarot_angle);
@@ -444,26 +457,6 @@ ${plannerReasoning ? `\n[ACTION PLANNER CONTEXT]\nDecision: ${intent}. Reasoning
     const { data: savedMessage } = await serviceClient.from("messages")
       .insert({ session_id, user_id: user.id, role: "assistant", content: readingText, metadata: { cards } })
       .select().single();
-
-    // Save execution log to function_logs for persistence
-    const logEntry: any = {
-      user_id: user.id,
-      session_id,
-      function_name: "tarot-reading",
-      planner_reasoning: plannerReasoning || null,
-      planner_intent: intent || null,
-      cards_drawn: cards.length > 0 ? cards : null,
-    };
-    try {
-      const cleanedJson = rawReading.replace(/^```json\n?/, "").replace(/```$/, "").trim();
-      const parsed = JSON.parse(cleanedJson);
-      logEntry.internal_monologue = parsed.internal_monologue || null;
-      logEntry.tarot_angle = parsed.tarot_angle || null;
-      logEntry.clarification_question = parsed.clarification_question || null;
-    } catch { /* parse already handled above */ }
-    try {
-      await serviceClient.from("function_logs").insert(logEntry);
-    } catch (e) { console.log("=== FUNCTION LOG SAVE ERROR ===", e); }
 
     // ============================================================
     // 6. PSYCHOLOGICAL GATE (Expanded: runs on ALL intents)
@@ -490,15 +483,30 @@ Analyze this message on TWO levels:
 SURFACE: What is the user explicitly saying or asking?
 SUBTEXT: What does their choice of topic, phrasing, tone, brevity, or eagerness reveal? A terse "aşk falı bak" vs a vulnerable "aşk hayatım hakkında yardıma ihtiyacım var" tells very different stories.
 
-IMPORTANT CONTEXT: This is a TAROT APP. Asking about the future, wanting predictions, seeking guidance — these are BASELINE behaviors. They are NOT psychological signals by themselves. A signal is something that reveals THIS person's inner world beyond what any generic tarot user would do.
+BASELINE BEHAVIORS (NEVER produce a signal for these alone — they are WHY people use tarot apps):
+- Asking about the future, wanting predictions, seeking guidance
+- Asking what another person thinks or feels about them
+- Asking for root causes or explanations ("kök neden ne?")
+- Requesting specific or direct answers instead of vague ones
+- Showing impatience with long or unclear responses
+- Wanting to know consequences of a decision
+- Accepting or declining an offer to do another reading
+These are the equivalent of asking a doctor "what's wrong with me?" — universal, not personal.
 
-If there is psychological substance (surface OR subtext): Write a 1-2 sentence observation in English. DESCRIBE the behavior without clinical labels. Do NOT say "externalization" or "defense mechanism" — just describe what happened.
+WHEN TO PRODUCE A SIGNAL: Only when the user reveals something about THEMSELVES that goes beyond standard tarot usage. Their LIFE FACTS, EMOTIONAL STATES, RELATIONSHIP PATTERNS, BEHAVIORAL SEQUENCES (e.g., said X then immediately pivoted to Y), or SELF-CONTRADICTIONS are signals. The ACT of asking a tarot question is never a signal.
+
+SIGNAL TYPE — classify your signal:
+- "self_disclosure": User shares personal facts, emotional states, or reveals something about their inner world
+- "behavioral_sequence": User shows a notable pattern (e.g., acknowledges something then immediately deflects)
+- "communication_style": User's tone/phrasing is notably distinctive (NOTE: this is LOW WEIGHT and should rarely drive clinical hypotheses — a blunt tone is a communication preference, not a psychological defense)
+
+If there is psychological substance: Write a 1-2 sentence observation. DESCRIBE behavior without clinical labels.
 If there is nothing beyond baseline tarot usage: Return {"signal": "NO_SIGNAL"}
 
 Include "event_context" for real-world events (graduation, breakup, job change).
 Include "facts" for demographic data (age, job, relationship status).
 
-Return JSON: {"signal": "..." or "NO_SIGNAL", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
+Return JSON: {"signal": "..." or "NO_SIGNAL", "signal_type": "self_disclosure" | "behavioral_sequence" | "communication_style", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
         } else if (intent === "FEEDBACK_POSITIVE" || intent === "FEEDBACK_NEGATIVE") {
           gatePromptText = `User's message: "${question}"
 
@@ -517,7 +525,7 @@ ${intent === "FEEDBACK_NEGATIVE" ? `CRITICAL: Take their disagreement at FACE VA
 
 Also note BEHAVIORAL SEQUENCES: If the user acknowledged something uncomfortable and then IMMEDIATELY pivoted to a different topic, note the sequence without labeling it. Example: "After tentatively accepting [X], user immediately pivoted to asking about future romantic prospects. This sequence is noted." Do NOT label this as externalization or avoidance — in a tarot context, asking about the future is baseline behavior. The sequence may or may not be significant; consolidation will determine that with more evidence.
 
-Return JSON: {"signal": "...", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": null, "facts": []}`;
+Return JSON: {"signal": "...", "signal_type": "self_disclosure" | "behavioral_sequence" | "feedback_response", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": null, "facts": []}`;
         } else { // CHAT
           gatePromptText = `User's message: "${question}"
 ${lastAssistantMsg ? `\nThe reader's last message was:\n"${lastAssistantMsg.substring(0, 400)}"\n` : ""}
@@ -527,11 +535,21 @@ This is a conversational message. Analyze it for:
 2. SUBTEXT: HOW they say it matters. Brevity, deflection, elaboration, tone shifts. If the reader asked a deep question and the user gave a one-word answer, that brevity itself may be notable.
 3. FACTS: age, job, relationship status, life circumstances → extract into facts array.
 
-CONTEXT: This is a TAROT APP. Asking about the future is baseline, not a signal. Focus on what's UNIQUE to this person.
+BASELINE BEHAVIORS (NEVER produce a signal for these alone):
+- Asking about the future, wanting predictions
+- Asking what another person thinks/feels
+- Requesting specific or direct answers
+- Showing impatience or asking for clarity
+These are normal tarot app usage. Focus on what's UNIQUE to this person.
+
+SIGNAL TYPE — classify your signal:
+- "self_disclosure": User shares personal facts, emotional states, inner world
+- "behavioral_sequence": User shows a notable pattern (e.g., says X then pivots to Y)
+- "communication_style": User's tone is distinctive (LOW WEIGHT — rarely drives clinical hypotheses)
 
 If nothing meaningful: Return {"signal": "NO_SIGNAL"}
 
-Return JSON: {"signal": "..." or "NO_SIGNAL", "confidence": "0.1 to 1.0 (how explicit/strong the signal is)", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
+Return JSON: {"signal": "..." or "NO_SIGNAL", "signal_type": "self_disclosure" | "behavioral_sequence" | "communication_style", "confidence": "0.1 to 1.0", "event_context": "..." or null, "facts": [{"key": "...", "value": "...", "source": "exact user quote"}] or []}`;
         }
 
         const gateResponse = await callGemini(
@@ -549,7 +567,8 @@ RULES:
 6. Quote the user's exact words as evidence.
 7. Extract facts (age, job, relationship status) into the "facts" array.
 8. When a user gives feedback (agrees/disagrees), record WHAT SPECIFIC CLAIM they responded to.
-9. DYNAMIC CONFIDENCE: Assign a 'confidence' score between 0.1 and 1.0 to your signal. A tentative "galiba" (I guess) = 0.3. An explicit, enthusiastic agreement or a very direct self-disclosure = 0.9. Score based on the STRENGTH of the user's expression.`
+9. DYNAMIC CONFIDENCE: Assign a 'confidence' score between 0.1 and 1.0. A tentative "galiba" = 0.3. Explicit self-disclosure = 0.9. Bare fact disclosure ("ayrılık yaşandı") = max 0.85. Score based on STRENGTH of expression.
+10. SIGNAL TYPE: Always classify your signal as "self_disclosure", "behavioral_sequence", or "communication_style". If the signal is purely about HOW the user speaks (tone, directness, brevity) rather than WHAT they reveal about themselves, it MUST be "communication_style".`
         );
 
         try {
@@ -577,16 +596,19 @@ RULES:
           if (gateData.signal && gateData.signal !== "NO_SIGNAL") {
             console.log("=== PSYCHOLOGICAL GATE: SIGNAL DETECTED ===\n", gateData, "\n=============================================");
             const embedding = await getEmbedding(gateData.signal);
+            const signalType = gateData.signal_type || "self_disclosure";
             const { error: gateInsertErr } = await serviceClient.from("clinical_observations").insert({
               user_id: user.id, session_id,
               content: gateData.signal, embedding, confidence: gateData.confidence || 0.5,
               event_context: gateData.event_context || null,
+              signal_type: signalType,
               source: "gate", is_consolidated: false,
             });
             if (gateInsertErr) console.error("=== GATE INSERT ERROR ===", gateInsertErr.message);
             // Update function log with gate data
             logEntry.gate_signal = gateData.signal;
             logEntry.gate_confidence = gateData.confidence || 0.5;
+            console.log(`=== GATE SIGNAL TYPE: ${signalType} ===`);
           } else {
             console.log("=== PSYCHOLOGICAL GATE: NO SIGNAL ===");
           }
@@ -610,7 +632,7 @@ RULES:
 
         const { data: signals } = await serviceClient
           .from("clinical_observations")
-          .select("id, content, event_context, confidence, created_at")
+          .select("id, content, event_context, confidence, signal_type, created_at")
           .eq("user_id", user.id)
           .eq("source", "gate")
           .eq("is_consolidated", false)
@@ -619,7 +641,7 @@ RULES:
         // V6: Fetch historical signals for cross-session pattern recognition
         const { data: historicalSignals } = await serviceClient
           .from("clinical_observations")
-          .select("id, content, event_context, confidence, created_at")
+          .select("id, content, event_context, confidence, signal_type, created_at")
           .eq("user_id", user.id)
           .eq("source", "gate")
           .eq("is_consolidated", true)
@@ -636,7 +658,7 @@ RULES:
           .maybeSingle();
 
         const formatSignal = (s: any, i: number) => 
-          `${i + 1}. [${new Date(s.created_at).toISOString().split('T')[0]}] ${s.content}${s.event_context ? ` [Context: ${s.event_context}]` : ""} (confidence: ${s.confidence})`;
+          `${i + 1}. [${new Date(s.created_at).toISOString().split('T')[0]}] [${(s.signal_type || 'self_disclosure').toUpperCase()}] ${s.content}${s.event_context ? ` [Context: ${s.event_context}]` : ""} (confidence: ${s.confidence})`;
 
         const historicalList = sortedHistorical.length > 0 
           ? sortedHistorical.map(formatSignal).join("\n") 
@@ -664,6 +686,24 @@ CRITICAL RULES:
 4. NEVER reference tarot cards, spreads, or card imagery in your analysis.
 5. CROSS-SESSION PATTERNS: Look for behavioral sequences that repeat across both historical and new observations.
 
+BASELINE BEHAVIOR FILTER (CRITICAL):
+This is a TAROT application. The following behaviors are COMPLETELY NORMAL for tarot users and must NEVER be used as evidence for any psychological hypothesis:
+- Asking about the future or seeking predictions
+- Asking what another person thinks or feels
+- Asking for root causes ("kök neden ne?")
+- Wanting specific or direct answers
+- Showing impatience with vague responses
+- Requesting consequences of decisions
+- Asking the tarot to reveal hidden truths about others
+If an observation describes ONLY one of these behaviors with no additional self-disclosure, SKIP IT as evidence entirely.
+
+SIGNAL WEIGHT HIERARCHY:
+Each observation is tagged with a signal type. Respect these weights:
+- [SELF_DISCLOSURE]: PRIMARY evidence — the user revealed something about their inner world. USE THIS.
+- [BEHAVIORAL_SEQUENCE]: PRIMARY evidence — the user showed a notable behavioral pattern. USE THIS.
+- [FEEDBACK_RESPONSE]: SECONDARY evidence — valuable but requires corroboration from other signals.
+- [COMMUNICATION_STYLE]: TERTIARY evidence — describes HOW the user communicates (tone, directness), NOT who they are. A blunt tone is a communication preference, NOT a psychological defense. NEVER build or strengthen a schema primarily from communication_style observations.
+
 SCHEMA DISCIPLINE:
 - Your PRIMARY job is to CONFIRM or CHALLENGE existing schemas based on new evidence.
 - Extract a new schema ONLY IF there is overwhelming, explicit evidence in the user's words, preferably repeating across sessions.
@@ -675,7 +715,7 @@ Return a JSON object with:
 1. "internal_monologue": Your thought pipeline. Discuss cross-session patterns, weigh evidence for/against existing schemas, and debate if a new schema is justified.
 2. "confirmed": Existing hypotheses SUPPORTED by new evidence. [{"hypothesis": "...", "new_confidence": 0.x, "reason": "..."}]
 3. "challenged": Existing hypotheses CONTRADICTED. [{"hypothesis": "...", "new_confidence": 0.x, "reason": "..."}]
-4. "new_hypotheses": Newly detected patterns based ONLY on strong evidence. [{"hypothesis": "...", "confidence": 0.3, "evidence": "user's own words"}]
+4. "new_hypotheses": Newly detected patterns based ONLY on strong evidence. [{"schema_name": "Short Name (e.g. External Locus of Control)", "hypothesis": "Full explanation...", "confidence": 0.3, "evidence": "user's own words"}]
 5. "updated_core_belief": Updated core belief (1 sentence, English). Must be grounded in what the user actually said.
 6. "updated_defenses": Updated defense mechanisms list (English).
 7. "updated_narrative": Updated narrative (2-3 sentences, English). Must reference the user's actual statements.
@@ -690,6 +730,7 @@ Return ONLY valid JSON.`;
         try {
           const consData = JSON.parse(consolidationResult.replace(/```json\n?|\n?```/g, "").trim());
           console.log("=== CONSOLIDATION RESULT ===\n", JSON.stringify(consData, null, 2), "\n============================");
+          logEntry.consolidation_result = consData;
 
           const allHypotheses = [
             ...(consData.confirmed || []).map((h: any) => ({ ...h, type: "confirmed" })),
@@ -723,9 +764,14 @@ Return ONLY valid JSON.`;
           const updatedSchemas = [
             ...survivingOldSchemas.map((s: any) => ({
               schema: s.schema,
+              description: s.description || s.schema,
               confidence: confirmedMap.has(s.schema?.toLowerCase()) ? confirmedMap.get(s.schema?.toLowerCase()) : s.confidence,
             })),
-            ...(consData.new_hypotheses || []).map((h: any) => ({ schema: h.hypothesis, confidence: h.confidence })),
+            ...(consData.new_hypotheses || []).map((h: any) => ({ 
+              schema: h.schema_name || h.hypothesis, 
+              description: h.hypothesis, 
+              confidence: h.confidence 
+            })),
           ].filter(s => (s.confidence || 0) > 0.2);
 
           const narrativeForEmbed = consData.updated_narrative || currentProfile?.narrative || "";
@@ -757,6 +803,10 @@ Return ONLY valid JSON.`;
         } catch { console.log("=== CONSOLIDATION PARSE ERROR, raw:", consolidationResult); }
       }
     } catch (e) { console.log("=== CONSOLIDATION ERROR ===\n", e); }
+
+    try {
+      await serviceClient.from("function_logs").insert(logEntry);
+    } catch (e) { console.log("=== FUNCTION LOG SAVE ERROR ===", e); }
 
     return new Response(JSON.stringify({ reading: readingText, cards, message_id: savedMessage?.id || null }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } });

@@ -6,18 +6,22 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
   Animated,
   Keyboard,
+  Alert,
+  RefreshControl,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../providers/AuthProvider';
+import { useToast } from '../providers/ToastProvider';
 import MessageBubble from '../components/MessageBubble';
 import CardDisplay from '../components/CardDisplay';
+import TypingIndicator from '../components/TypingIndicator';
 import {
   createSession,
   getSessions,
@@ -36,6 +40,7 @@ const DRAWER_WIDTH = SCREEN_WIDTH * 0.80;
 
 export default function ChatScreen() {
   const { user, signOut } = useAuth();
+  const { showError, showSuccess, showToast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,6 +48,7 @@ export default function ChatScreen() {
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
 
@@ -61,7 +67,20 @@ export default function ChatScreen() {
         await startNewSession();
       }
     } catch (error: any) {
-      Alert.alert('Hata', error.message);
+      showError(error.message || 'Oturumlar yüklenemedi');
+    }
+  };
+
+  const onRefreshSessions = async () => {
+    setRefreshing(true);
+    try {
+      const existing = await getSessions(user!.id);
+      setSessions(existing);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error: any) {
+      showError('Oturumlar güncellenemedi');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -73,7 +92,7 @@ export default function ChatScreen() {
       closeDrawer();
       scrollToBottom();
     } catch (error: any) {
-      Alert.alert('Hata', error.message);
+      showError(error.message || 'Mesajlar yüklenemedi');
     }
   };
 
@@ -85,11 +104,12 @@ export default function ChatScreen() {
       setSessions((prev) => [session, ...prev]);
       closeDrawer();
     } catch (error: any) {
-      Alert.alert('Hata', error.message);
+      showError(error.message || 'Yeni sohbet oluşturulamadı');
     }
   };
 
   const handleDeleteSession = (session: Session) => {
+    // Use Alert for destructive confirmations — this is the ONE valid use case
     Alert.alert(
       'Sohbeti Sil',
       'Bu sohbet kalıcı olarak silinecek. Emin misin?',
@@ -110,8 +130,9 @@ export default function ChatScreen() {
                   await startNewSession();
                 }
               }
+              showSuccess('Sohbet silindi');
             } catch (error: any) {
-              Alert.alert('Hata', error.message);
+              showError(error.message || 'Sohbet silinemedi');
             }
           },
         },
@@ -123,7 +144,6 @@ export default function ChatScreen() {
   const autoTitle = (message: string): string => {
     const cleaned = message.trim();
     if (cleaned.length <= 30) return cleaned;
-    // Cut at word boundary
     const cut = cleaned.substring(0, 30);
     const lastSpace = cut.lastIndexOf(' ');
     return (lastSpace > 15 ? cut.substring(0, lastSpace) : cut) + '...';
@@ -156,16 +176,15 @@ export default function ChatScreen() {
     setRetryPayload(null);
 
     try {
-      // Auto-title on first message
       const isFirstMessage = messages.length === 0;
 
       const savedUserMsg = await saveMessage(
         currentSession.id, user.id, 'user', userMessage
       );
       setMessages((prev) => [...prev, savedUserMsg]);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       scrollToBottom();
 
-      // Update session title on first user message
       if (isFirstMessage) {
         const title = autoTitle(userMessage);
         await updateSessionTitle(currentSession.id, title);
@@ -181,7 +200,7 @@ export default function ChatScreen() {
 
       await fetchReading(userMessage, messageHistory);
     } catch (error: any) {
-      Alert.alert('Hata', 'Mesaj gönderilemedi: ' + error.message);
+      showError('Mesaj gönderilemedi. Tekrar dene.');
     }
   };
 
@@ -207,10 +226,11 @@ export default function ChatScreen() {
         created_at: new Date().toISOString()
       };
       setMessages((prev) => [...prev, newAssistantMsg]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       scrollToBottom();
     } catch (error: any) {
       setRetryPayload({ question, history });
-      Alert.alert('Yoğunluk', error.message || 'Bağlantı kurulamadı.');
+      showToast(error.message || 'Bağlantı kurulamadı. Tekrar dene.', 'warning', 'Bağlantı Hatası');
     } finally {
       setLoading(false);
     }
@@ -236,10 +256,10 @@ export default function ChatScreen() {
                   s.id === currentSession.id ? { ...s, status: 'completed' as const } : s
                 )
               );
-              Alert.alert('✨ Tamamlandı', 'Oturum analizi kaydedildi.');
+              showSuccess('Oturum analizi kaydedildi.', '✨ Tamamlandı');
               await startNewSession();
             } catch (error: any) {
-              Alert.alert('Hata', error.message);
+              showError(error.message || 'Oturum kapatılamadı');
             } finally {
               setLoading(false);
             }
@@ -292,43 +312,51 @@ export default function ChatScreen() {
 
   const { today, week, older } = groupSessions();
 
+  const renderRightActions = (item: Session) => {
+    return (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => handleDeleteSession(item)}
+      >
+        <Text style={styles.deleteActionText}>Sil</Text>
+      </TouchableOpacity>
+    );
+  };
+
   const renderSessionGroup = (title: string, items: Session[]) => {
     if (items.length === 0) return null;
     return (
       <View key={title}>
         <Text style={styles.groupTitle}>{title}</Text>
         {items.map((item) => (
-          <TouchableOpacity
+          <Swipeable
             key={item.id}
-            style={[
-              styles.sessionItem,
-              currentSession?.id === item.id && styles.sessionItemActive,
-            ]}
-            onPress={() => loadSession(item)}
-            onLongPress={() => handleDeleteSession(item)}
+            renderRightActions={() => renderRightActions(item)}
+            overshootRight={false}
           >
-            <View style={styles.sessionItemRow}>
-              <Text style={styles.sessionItemIcon}>
-                {item.status === 'active' ? '🔮' : '📜'}
-              </Text>
-              <View style={styles.sessionItemTextWrap}>
-                <Text style={styles.sessionItemTitle} numberOfLines={1}>
-                  {item.title || 'Yeni Oturum'}
+            <TouchableOpacity
+              style={[
+                styles.sessionItem,
+                currentSession?.id === item.id && styles.sessionItemActive,
+              ]}
+              onPress={() => loadSession(item)}
+            >
+              <View style={styles.sessionItemRow}>
+                <Text style={styles.sessionItemIcon}>
+                  {item.status === 'active' ? '🔮' : '📜'}
                 </Text>
-                <Text style={styles.sessionItemMeta}>
-                  {formatDate(item.created_at)}
-                  {item.status === 'completed' && ' • tamamlandı'}
-                </Text>
+                <View style={styles.sessionItemTextWrap}>
+                  <Text style={styles.sessionItemTitle} numberOfLines={1}>
+                    {item.title || 'Yeni Oturum'}
+                  </Text>
+                  <Text style={styles.sessionItemMeta}>
+                    {formatDate(item.created_at)}
+                    {item.status === 'completed' && ' • tamamlandı'}
+                  </Text>
+                </View>
               </View>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDeleteSession(item)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={styles.deleteIcon}>✕</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </Swipeable>
         ))}
       </View>
     );
@@ -352,7 +380,7 @@ export default function ChatScreen() {
         {/* Drawer header */}
         <View style={styles.drawerHeader}>
           <Text style={styles.drawerLogo}>🔮</Text>
-          <Text style={styles.drawerBrand}>Tarot Flow</Text>
+          <Text style={styles.drawerBrand}>TarotFlow</Text>
         </View>
 
         {/* New chat button */}
@@ -378,6 +406,14 @@ export default function ChatScreen() {
               </>
             }
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefreshSessions}
+                tintColor="#9B8AFF"
+                colors={['#9B8AFF']}
+              />
+            }
           />
         </View>
 
@@ -411,7 +447,7 @@ export default function ChatScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {currentSession?.title || '🔮 Tarot Flow'}
+              {currentSession?.title || '🔮 TarotFlow'}
             </Text>
           </View>
           {currentSession?.status === 'active' && messages.length > 0 && (
@@ -459,18 +495,13 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled"
         />
 
-        {/* Loading */}
-        {loading && (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color="#9B8AFF" />
-            <Text style={styles.loadingText}>Kartlar okunuyor...</Text>
-          </View>
-        )}
+        {/* Typing Indicator */}
+        {loading && <TypingIndicator />}
 
         {/* Retry Button */}
         {retryPayload && !loading && currentSession?.status === 'active' && (
           <View style={styles.retryRow}>
-            <Text style={styles.retryText}>Bağlantı kurulamadı.</Text>
+            <Text style={styles.retryText}>Yanıt alınamadı.</Text>
             <TouchableOpacity 
               style={styles.retryButton} 
               onPress={() => fetchReading(retryPayload.question, retryPayload.history)}
@@ -572,11 +603,17 @@ const styles = StyleSheet.create({
   sessionItemTextWrap: { flex: 1 },
   sessionItemTitle: { color: '#D8D0E8', fontSize: 14, fontWeight: '500' },
   sessionItemMeta: { color: '#5A5A7A', fontSize: 11, marginTop: 2 },
-  deleteButton: {
-    width: 24, height: 24, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
+  deleteAction: {
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 70,
+    borderTopRightRadius: 10,
+    borderBottomRightRadius: 10,
+    marginVertical: 4,
+    marginRight: 8,
   },
-  deleteIcon: { color: '#5A5A7A', fontSize: 12 },
+  deleteActionText: { color: '#FFF', fontWeight: '600', fontSize: 13 },
   emptyText: { color: '#5A5A7A', textAlign: 'center', paddingVertical: 24, fontSize: 14 },
 
   drawerFooter: {
@@ -653,12 +690,6 @@ const styles = StyleSheet.create({
   messageList: { flex: 1 },
   messageListContent: { paddingVertical: 14 },
 
-  loadingRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 16, gap: 10,
-  },
-  loadingText: { color: '#9B8AFF', fontSize: 13, fontWeight: '500', fontStyle: 'italic' },
-
   retryRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 14, gap: 12,
@@ -711,4 +742,3 @@ const styles = StyleSheet.create({
   },
   readOnlyText: { color: '#5A5A7A', fontSize: 13, textAlign: 'center' },
 });
-

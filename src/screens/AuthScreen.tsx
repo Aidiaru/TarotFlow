@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -13,17 +12,46 @@ import {
   Animated,
 } from 'react-native';
 import { useAuth } from '../providers/AuthProvider';
+import { useToast } from '../providers/ToastProvider';
 import { LinearGradient } from 'expo-linear-gradient';
+
+// Human-readable error mapping
+const ERROR_MAP: Record<string, string> = {
+  'Invalid login credentials': 'Email veya şifre hatalı.',
+  'User already registered': 'Bu email zaten kayıtlı. Giriş yapmayı dene.',
+  'Email not confirmed': 'Email adresini henüz onaylamamışsın. Gelen kutunu kontrol et.',
+  'Password should be at least 6 characters': 'Şifre en az 6 karakter olmalı.',
+  'Unable to validate email address: invalid format': 'Geçerli bir email adresi gir.',
+  'Email rate limit exceeded': 'Çok fazla deneme yaptın. Biraz bekle.',
+  'For security purposes, you can only request this after': 'Güvenlik sebebiyle biraz beklemelisin.',
+};
+
+function humanizeError(message: string): string {
+  for (const [key, value] of Object.entries(ERROR_MAP)) {
+    if (message.includes(key)) return value;
+  }
+  return message;
+}
 
 export default function AuthScreen() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { showError, showSuccess, showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
+  // Inline validation errors
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const emailBorderAnim = useRef(new Animated.Value(0)).current;
+  const passwordBorderAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -41,11 +69,55 @@ export default function AuthScreen() {
     ]).start();
   }, []);
 
-  const handleSubmit = async () => {
-    if (!email || !password) {
-      Alert.alert('Hata', 'Email ve şifre gerekli');
-      return;
+  const shake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const flashBorder = (anim: Animated.Value) => {
+    Animated.sequence([
+      Animated.timing(anim, { toValue: 1, duration: 200, useNativeDriver: false }),
+      Animated.timing(anim, { toValue: 0, duration: 2000, useNativeDriver: false }),
+    ]).start();
+  };
+
+  const validate = (): boolean => {
+    let valid = true;
+    setEmailError('');
+    setPasswordError('');
+
+    if (!email.trim()) {
+      setEmailError('Email adresi gerekli');
+      flashBorder(emailBorderAnim);
+      valid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      setEmailError('Geçerli bir email adresi gir');
+      flashBorder(emailBorderAnim);
+      valid = false;
     }
+
+    if (!password) {
+      setPasswordError('Şifre gerekli');
+      flashBorder(passwordBorderAnim);
+      valid = false;
+    } else if (password.length < 6) {
+      setPasswordError('Şifre en az 6 karakter olmalı');
+      flashBorder(passwordBorderAnim);
+      valid = false;
+    }
+
+    if (!valid) shake();
+    return valid;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
 
     setLoading(true);
     const { error } = isLogin
@@ -53,9 +125,11 @@ export default function AuthScreen() {
       : await signUp(email, password);
 
     if (error) {
-      Alert.alert('Hata', error.message);
+      const msg = humanizeError(error.message);
+      showError(msg);
+      shake();
     } else if (!isLogin) {
-      Alert.alert('Başarılı', 'Hesabınız oluşturuldu. Email onayınızı kontrol edin.');
+      showSuccess('Hesabın oluşturuldu! Email onayını kontrol et.', '✨ Hoş geldin');
       setIsLogin(true);
     }
     setLoading(false);
@@ -65,11 +139,20 @@ export default function AuthScreen() {
     setLoading(true);
     const { error } = await signInWithGoogle();
     if (error) {
-      Alert.alert('Hata', error.message);
+      showError(humanizeError(error.message));
     }
     setLoading(false);
   };
 
+  const emailBorderColor = emailBorderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(138, 43, 226, 0.2)', 'rgba(255, 59, 48, 0.6)'],
+  });
+
+  const passwordBorderColor = passwordBorderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(138, 43, 226, 0.2)', 'rgba(255, 59, 48, 0.6)'],
+  });
 
   return (
     <KeyboardAvoidingView
@@ -91,7 +174,7 @@ export default function AuthScreen() {
         <Animated.View
           style={[
             styles.animatedContainer,
-            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { translateX: shakeAnim }] }
           ]}
         >
           {/* Header */}
@@ -99,7 +182,7 @@ export default function AuthScreen() {
             <View style={styles.logoContainer}>
               <Text style={styles.logo}>🔮</Text>
             </View>
-            <Text style={styles.title}>Tarot Flow</Text>
+            <Text style={styles.title}>TarotFlow</Text>
             <Text style={styles.subtitle}>
               Kartlar seni tanımaya başlasın
             </Text>
@@ -127,26 +210,42 @@ export default function AuthScreen() {
 
           {/* Email Form */}
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Email adresin"
-                placeholderTextColor="#7A7A9D"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
+            <View>
+              <Animated.View style={[styles.inputContainer, { borderColor: emailBorderColor }]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email adresin"
+                  placeholderTextColor="#7A7A9D"
+                  value={email}
+                  onChangeText={(t) => { setEmail(t); setEmailError(''); }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                />
+              </Animated.View>
+              {emailError ? <Text style={styles.fieldError}>{emailError}</Text> : null}
             </View>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Şifren"
-                placeholderTextColor="#7A7A9D"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
+
+            <View>
+              <Animated.View style={[styles.inputContainer, { borderColor: passwordBorderColor }]}>
+                <TextInput
+                  style={[styles.input, { paddingRight: 50 }]}
+                  placeholder="Şifren"
+                  placeholderTextColor="#7A7A9D"
+                  value={password}
+                  onChangeText={(t) => { setPassword(t); setPasswordError(''); }}
+                  secureTextEntry={!showPassword}
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁'}</Text>
+                </TouchableOpacity>
+              </Animated.View>
+              {passwordError ? <Text style={styles.fieldError}>{passwordError}</Text> : null}
             </View>
 
             <TouchableOpacity
@@ -156,7 +255,7 @@ export default function AuthScreen() {
               disabled={loading}
             >
               <LinearGradient
-                colors={['#8A2BE2', '#4B0082']}
+                colors={loading ? ['#5B3FD4', '#3A2690'] : ['#8A2BE2', '#4B0082']}
                 style={styles.primaryButton}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -172,7 +271,7 @@ export default function AuthScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setIsLogin(!isLogin)}
+              onPress={() => { setIsLogin(!isLogin); setEmailError(''); setPasswordError(''); }}
               style={styles.switchButton}
             >
               <Text style={styles.switchText}>
@@ -273,16 +372,33 @@ const styles = StyleSheet.create({
   inputContainer: {
     backgroundColor: 'rgba(30, 25, 45, 0.6)',
     borderWidth: 1,
-    borderColor: 'rgba(138, 43, 226, 0.2)',
     borderRadius: 16,
     overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   input: {
+    flex: 1,
     paddingHorizontal: 20,
     paddingVertical: 16,
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '500',
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 16,
+    padding: 4,
+  },
+  eyeIcon: {
+    fontSize: 18,
+  },
+  fieldError: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 6,
+    marginLeft: 16,
   },
   buttonContainer: {
     marginTop: 8,
@@ -291,11 +407,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 16,
     elevation: 8,
-  },
-  button: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
   },
   primaryButton: {
     borderRadius: 16,
