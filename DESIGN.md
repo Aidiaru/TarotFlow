@@ -459,3 +459,41 @@ seç; ürünün kendisi o ses.
    birikmiş veri) → neyin migrate edileceğine, neyin atılacağına karar ver
 2. 78 kart × rakip anlamlar tablosu
 3. Eksen listesi kesinleşince yeni şema + migration
+
+---
+
+## 13. Mevcut sistemden ampirik bulgular (2026-08-19, canlı DB)
+
+7 kullanıcı, 25 seans, 179 mesaj, 75 açılım, 89 gözlem, 52 fact.
+**Bu veri atılmayacak** — elimizdeki tek eval korpusu (Barnum regresyon testi §6,
+eksen çıkarımının geriye dönük denenmesi).
+
+### Bulgu 1: append-only `user_memory` çelişki biriktiriyor
+Tek bir kullanıcıda (`73a0df88`):
+
+| key | biriken değerler |
+|---|---|
+| `employment_status` | "unemployed / no post-grad plan" ‖ "looking for a job" ‖ "Employed for 10 months" |
+| `relationship_status` | "single / seeking a partner" ‖ "long-term unrequited love" ‖ "unstable or painful connection" ‖ "unresolved breakup dynamic" |
+| `education_status` | "near graduation" ‖ "Student graduating in one month" |
+
+Hepsi `tarot-reading/index.ts:301`'de "Chronological Timeline" başlığıyla **aynı anda**
+prompt'a giriyor. Model çelişkiyi çözemez, **karta uyanı seçer** — confirmation bias
+tam buradan giriyor. Ayrıca `student ‖ Student`: normalizasyon yok.
+→ §2.1 (bi-temporal, çözümlenmiş facts) ve §4.4 (devralma) bunu çözer.
+
+### Bulgu 2: LLM'den istenen serbest güven skoru doygunlaşıyor
+gate gözlemleri: n=49, ortalama **0.87**, minimum 0.50 — prompt "tentative = 0.3"
+demesine rağmen alt uç hiç kullanılmamış. Değişmeyen skor ağırlıklandırma yapamaz.
+Buna karşılık konsolidasyon çıktıları 0.40–0.70 arasında kalibre — çünkü orada
+açık disiplin kuralları var.
+
+**Ders:** LLM'den havada bir 0–1 güven isteme. Güveni **sayılabilir kanıttan türet**:
+`contexts_seen`, `sessions_seen`, confirm/disconfirm/silent sayaçları (§4.6).
+
+### Bulgu 3: `signal_type` taksonomisi pratikte tek kategoriye çökmüş
+self_disclosure 49 · behavioral_sequence 3 · communication_style 1.
+Konsolidasyondaki SIGNAL WEIGHT HIERARCHY (`index.ts:704-709`) fiilen tek kategori
+üzerinde çalışıyor — ölü kod.
+→ Yeni tasarımda kategori, modelin serbest seçimi değil, **eksen kaydının kendi
+alanlarından** (§3 teslim formatı) türeyecek.
