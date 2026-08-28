@@ -76,25 +76,31 @@ Teşhis değil, **kart anlamı çeviren eksenler**. Bkz. §3.
 ## 3. Eksenler (axes)
 
 ### Tanım
-Bir kartın hangi anlama geleceğini belirleyen, kişiye ait, iki kutuplu soru.
+Bir kartın hangi anlama geleceğini belirleyen, **kişiye ait, kapalı değerli** bir soru.
+Çoğu eksen iki kutupludur ama bu şart değil (bkz. *Eksen kardinalitesi*).
 
 Eksenler psikoloji literatüründen değil, **kartlardan geriye doğru** türetilir:
-kart al → çelişen iki anlamını yaz → "bu kişi hakkında ne bilseydim seçebilirdim?"
-→ cevabı iki kutup olarak yaz.
+kart al → aday anlamlarını yaz → "bu kişi hakkında ne bilseydim seçebilirdim?"
+→ cevabı kutup/değer kümesi olarak yaz.
 
-### Taslak eksenler (DOĞRULANMADI)
+### Taslak eksenler
 
-| Eksen | Kutuplar | Çevirdiği kartlar |
-|---|---|---|
-| fail konumu | edilgen ↔ etken | Kader Çarkı, Kılıç Üçlüsü, Adalet, Asılan Adam |
-| ilişkisel duruş | yaklaşan ↔ uzaklaşan | Kupa Sekizlisi, Ermiş, Aşıklar |
-| zaman yönelimi | geçmişe tutunan ↔ geleceğe kaygılı | Kupa Altılısı, Kupa Dörtlüsü |
-| yıkım iştahı | tehdit ↔ ferahlama | Kule, Ölüm |
-| arzuya izin | suçluluk ↔ meşruiyet | Şeytan, Kupa Yedilisi |
-| otoriteyle ilişki | boyun eğen ↔ karşı duran | İmparator, Başrahip |
+Tam taslak (gözlenebilir işaretler + yalanlayan kanıt dahil) **§14**'tedir.
+Özet:
 
-> Bu liste bir taslaktır ve tarot pratiğine göre doğrulanacaktır.
-> Özellikle süit/element geleneğinden gelen bir eksen eksik olabilir.
+| # | eksen_id | kutuplar | kart sayısı |
+|---|---|---|---|
+| 1 | `fail_konumu` | edilgen ↔ etken | 6 |
+| 2 | `belirsizlik_tepkisi` | eylemsizlik ↔ aceleci hamle | 5 |
+| 3 | `ilişkisel_duruş` | yaklaşan ↔ uzaklaşan | 5 |
+| 4 | `yıkım_iştahı` | tehdit ↔ ferahlama | 4 |
+| 5 | `zaman_yönelimi` | geçmişe tutunan ↔ geleceğe kaygılı | 4 |
+| 6 | `arzuya_izin` | suçluluk ↔ meşruiyet | 4 |
+| 7 | `otoriteyle_ilişki` | boyun eğen ↔ karşı duran | 4 |
+| ? | `içsel_sese_güven` | kendi sezgisi ↔ dış onay | 3 — aday, §7 ile örtüşüyor |
+
+> **DOĞRULANMADI.** Bu liste Claude'un kartlardan geriye türetmesidir, tarot
+> pratiğine göre sınanmadı. Süit/element geleneğinden gelen bir eksen eksik olabilir.
 
 ### Testler
 - **≥3 kartı çeviriyor mu?** Hayırsa çok dar, eksen değil.
@@ -143,8 +149,6 @@ Serbest metin olursa sistem onaylayamaz, yalanlayamaz, devralamaz, sayamaz.
 §4'teki tüm zaman makinesi **kapalı sözlük olmadan çalışmaz**.
 Eksen listesi = `dispositions.axis` kolonundaki enum.
 
----
-
 ### Eksen kaydı formatı (teslim formatı)
 
 Eksen listesi tarot pratiğinden üretilecek. Her eksen aşağıdaki formatta teslim
@@ -183,7 +187,7 @@ Psikolojik niteliğin yoktur. Dört mekanizma gerekir.
 | Yazma eşiği | düşük | çok yüksek |
 
 **Terfi kuralı:** `≥2 farklı bağlam` **ve** `≥2 ayrı seans` **ve** `≥2 hafta arayla`
-→ durum eğiliме terfi eder. Aksi halde durum kalır ve söner.
+→ durum, eğilime terfi eder. Aksi halde durum kalır ve söner.
 
 Bu kural olmadan kötü bir hafta, kişilik ilan edilir.
 
@@ -276,6 +280,22 @@ yeniden üret. Okuma değişmiyorsa Barnum'dur, profil iş yapmıyordur.
 
 78 kart × rakip anlamlar = statik tablo. Yalnızca çekilen kartların satırları
 enjekte edilir.
+
+### Bir kartın kaç anlamı olur? (sık karışan nokta)
+
+"78 kart x **rakip** anlamlar" ifadesi yanıltıcı olmasın: bir kartın anlam sayısı
+**ikiyle sınırlı değil** ve anlamların birbirinin zıddı olması **gerekmez**.
+
+- Bir kartın **2–6 aday anlamı (sense)** olur. Doğru terim "rakip" değil, **aday**.
+- Anlamlar zıt olabilir (`affetme` / `affedememe`) ama sadece farklı da olabilir
+  (`acı verici gerçek`, `yas`) — ikisi de geçerlidir.
+- **Her anlamın bir eksene bağlı olması gerekmez.** Bazıları soru bağlamından,
+  bazıları komşu karttan seçilir. Eksensiz anlam normaldir.
+- Zıtlık kısıtı yalnızca **eksen** tarafındadır, anlam tarafında değil — ve orada
+  bile kategorik eksenler serbesttir (bkz. §3 *Eksen kardinalitesi*).
+
+Yani `sense` tarafı serbest ve n-elemanlı; `axis` tarafı kapalı ve sayılabilir olmak
+zorunda. Kısıt yalnızca ikincisinde.
 
 ### Tablonun eksenlerle ilişkisi
 Aynı veri iki işe yarar:
@@ -419,8 +439,9 @@ seç; ürünün kendisi o ses.
 
 ## 11. Açık konular
 
-- [ ] **Eksen listesi kesinleştirilecek** (tarot pratiğinden, taslak §3)
-- [ ] 78 kart × rakip anlamlar tablosu
+- [ ] **Eksen listesi kesinleştirilecek** — taslak §14 hazır, Orçun'un review'u
+      bekleniyor (protokol §15)
+- [ ] 78 kart × aday anlamlar tablosu (2–6 anlam/kart, bkz. §7)
 - [ ] Postgres şeması: facts / dispositions / threads / evidence + supersession
 - [ ] Teslimat tercihleri için hangi davranışsal telemetri toplanacak
 - [ ] Well-being / koçluk yüzeyi: gerçekten ship edilecek mi?
@@ -432,8 +453,9 @@ seç; ürünün kendisi o ses.
 ## 12. Çalışma bölüşümü ve durum
 
 ### Bölüşüm
-- **Eksen listesi → Orçun.** Tarot bakan biri olduğu için ekseni pratikten
-  üretecek; ayrı bir oturumda hazırlayıp review'a getirecek. §3'teki formatta.
+- **Eksen taslağı → Claude (YAPILDI, §14).** Kartlardan geriye türetildi.
+- **Eksen review → Orçun.** Tarot bakan biri; §15'teki protokolle taslağı
+  onaylayacak/düzeltecek. Kart okumaları onun alanı, gözlenebilir işaretler Claude'un.
 - **78 kart × rakip anlamlar tablosu → Claude.** §3'teki türetme egzersizinin
   1. ve 2. adımını hazır vermek için. Düz kartlar (ters yok), Türkçe.
 - **Şema + migration'lar → Claude.** Eksen listesi kesinleştikten sonra.
@@ -450,14 +472,23 @@ seç; ürünün kendisi o ses.
 - Supabase MCP bağlı, `--project-ref=jjxodpqqfyvevjuovndw`, yazma yetkili.
 - Remote Control tüm oturumlar için açık (`/config`).
 - Worktree kaldırıldı; tek çalışma ağacı `F:/Projects/TarotFlow`.
-- `master` = `origin/master` = `3e2e56b`. Tez/sunum PDF'leri repoda ve GitHub'da.
+- `master` origin'den 3 commit ileride (**push edilmedi**). Tez/sunum PDF'leri repoda.
 - Çalışma ağacı temiz. Edge function'lardaki deneysel değişiklikler geri alındı
   (nasılsa yeniden yazılacak), Codex artıkları silindi.
 
+### Veri politikası
+Orçun mevcut DB'nin **silinmesine izin verdi** ("karımıza olacaksa sil"). Yine de
+tavsiye: **sakla**. Tutmanın maliyeti sıfır, değeri yüksek — 25 seans / 179 mesaj
+Barnum regresyon testinin (§6) ve eksen çıkarımının geriye dönük sınanmasının tek
+kaynağı. Şema değişikliği için silmeye gerek yok; yeni tablolar yanına kurulur,
+eskiler sonra düşürülür. Silme kararı ancak eski veri yeni tasarımı *kısıtlarsa*
+verilir — şu an kısıtlamıyor.
+
 ### Sıradaki adımlar
-1. Canlı Supabase şemasını incele (tablolar, `search_clinical_observations` RPC,
-   birikmiş veri) → neyin migrate edileceğine, neyin atılacağına karar ver
-2. 78 kart × rakip anlamlar tablosu
+1. ~~Canlı Supabase şemasını incele~~ → YAPILDI, bulgular §13
+2. Eksen review (Orçun, §15) → liste kesinleşir
+3. 78 kart × aday anlamlar tablosu (Claude)
+4. Postgres şeması + migration'lar (Claude), eksen listesi kesinleştikten sonra
 3. Eksen listesi kesinleşince yeni şema + migration
 
 ---
@@ -497,3 +528,195 @@ Konsolidasyondaki SIGNAL WEIGHT HIERARCHY (`index.ts:704-709`) fiilen tek katego
 üzerinde çalışıyor — ölü kod.
 → Yeni tasarımda kategori, modelin serbest seçimi değil, **eksen kaydının kendi
 alanlarından** (§3 teslim formatı) türeyecek.
+
+---
+
+## 14. Eksen taslağı v1 (Claude üretimi — Orçun'un onayı bekleniyor)
+
+Yöntem: §3'teki türetme. Çift anlamlı kartlar alındı, aday anlamları yazıldı,
+"bu kişi hakkında ne bilseydim seçebilirdim?" sorusu soruldu, tekrar eden cevaplar
+eksen olarak gruplandı. `≥3 kart` testini geçenler aşağıda.
+
+---
+
+### 1. `fail_konumu` — edilgen ↔ etken
+**domainler:** aşk, kariyer, aile, benlik (hepsi)
+
+| kart | edilgen okuma | etken okuma |
+|---|---|---|
+| Kader Çarkı | "kader müdahale etti" | "bu döngüyü sen başlattın" |
+| Kılıç Üçlüsü | "bana yapıldı, affedemiyorum" | "payımı görüyorum, bırakabilirim" |
+| Adalet | "sonunda hak ettiğimi alacağım" | "hesabı benim vermem gerekiyor" |
+| Kılıç Sekizlisi | "kapana kısıldım" | "bağı kendim kurdum, çözebilirim" |
+| Asılan Adam | "beni askıya aldılar" | "bilerek bekliyorum" |
+| Kule | "başıma yıkıldı" | "temeli ben çektim" |
+
+**gözlenebilir_işaretler:**
+- edilgen çatı yoğunluğu: "oldu", "denk geldi", "başıma geldi", "yaptılar"
+- olay anlatısında kendi kararının atlanması; nedensellik hep dışarıda başlıyor
+- sorularının öznesi: "o ne düşünüyor", "bana ne olacak"
+
+**yalanlayan_kanıt:**
+- sorulmadan kendi payını söylemesi ("ben de şunu yaptım")
+- bir sonucu açıkça kendi seçimine bağlaması
+- fail cümleler: "yapacağım", "bıraktım", "seçtim"
+
+---
+
+### 2. `belirsizlik_tepkisi` — eylemsizlik ↔ aceleci hamle
+**domainler:** kariyer, aşk, benlik
+
+| kart | eylemsizlik | aceleci hamle |
+|---|---|---|
+| Kılıç İkilisi | "karar veremiyor, dondu" | "bilinçli duraklama" |
+| Değnek Sekizlisi | "ivme var ama o duruyor" | "kontrolsüz, aceleci hamle" |
+| Aşıklar | "seçim bir tehdit, erteliyor" | "seçim bir fırsat, atlıyor" |
+| Kupa Yedilisi | "seçememe, hayale kaçış" | "seçenek bolluğunda dağılma" |
+| Asılan Adam | "atalet" | "verimli duraklama" |
+
+**gözlenebilir_işaretler:**
+- "bilmiyorum" dedikten sonra ne geldiği: sessizlik/erteleme mi, hemen plan mı
+- karar sorulduğunda: "bir düşüneyim / belki / bakarız" vs anında kesin cevap
+- soruyu sormadan önce kendi kararını çoktan açıklamış olması (aceleci uç)
+
+**yalanlayan_kanıt:**
+- belirsizlikte küçük ve somut bir adım tarif etmesi (iki kutbu da zayıflatır)
+- "acele etmeyeceğim" deyip gerekçelendirmesi
+
+---
+
+### 3. `ilişkisel_duruş` — yaklaşan ↔ uzaklaşan
+**domainler:** aşk, aile
+
+| kart | yaklaşan | uzaklaşan |
+|---|---|---|
+| Kupa Sekizlisi | "terk edildim, o gitti" | "ben çıktım, sağlıklıydı" |
+| Ermiş | "yalnızlık bir ceza" | "yalnızlık bir kaynak" |
+| İmparatoriçe | "besleyen, sarmalayan" | "boğan, sahiplenen" |
+| Kupa İkilisi | "karşılıklı bağ" | "bağ kurma isteği, henüz karşılıksız" |
+| Kupa Beşlisi | "kaybın yasında" | "kalanı görmeyi reddediyor" |
+
+**gözlenebilir_işaretler:**
+- ilişki anlatısında kimin gittiği/kaldığı — kim özne
+- mesafe dili: "boğuluyorum" (uzaklaşan) vs "yalnız kaldım" (yaklaşan)
+- karşı tarafın niyetini sorma sıklığı vs kendi çıkışını anlatma
+
+**yalanlayan_kanıt:**
+- aynı ilişkide her iki rolü de anlatması
+- mesafeyi şikâyet ya da kaçış olarak değil, kendi ihtiyacı olarak tanımlaması
+
+---
+
+### 4. `yıkım_iştahı` — tehdit ↔ ferahlama
+**domainler:** hepsi
+
+| kart | tehdit | ferahlama |
+|---|---|---|
+| Kule | "felaket, yıkım" | "kurtuluş, kabuğun kırılması" |
+| Ölüm | "kayıp, bitiş" | "dönüşüm, özgürleşme" |
+| Kılıç Onlusu | "dibe vurma" | "bittiğine göre artık yükselecek" |
+| Kader Çarkı | "kontrol kaybı" | "durgunluğun sonu" |
+
+**gözlenebilir_işaretler:**
+- değişim haberini kayıp olarak mı fırsat olarak mı çerçevelediği
+- "ya olmazsa" vs "en azından bir şey değişir"
+- "istikrar" kelimesine yüklediği değer
+
+**yalanlayan_kanıt:**
+- büyük bir değişimi kendisinin başlattığını anlatması (tehdit kutbunu zayıflatır)
+- bir kaybın ardından gerçek yas dili (ferahlama kutbunu zayıflatır)
+
+---
+
+### 5. `zaman_yönelimi` — geçmişe tutunan ↔ geleceğe kaygılı
+**domainler:** hepsi
+
+| kart | geçmişe tutunan | geleceğe kaygılı |
+|---|---|---|
+| Kupa Altılısı | "nostalji bir teselli" | "nostalji bir tuzak" |
+| Kılıç Dokuzlusu | "olmuş bir şeyin pişmanlığı" | "olmamış bir şeyin kaygısı" |
+| Kupa Dörtlüsü | "eskisini özleyip şimdikini görmüyor" | "belirsizlik yüzünden tatminsiz" |
+| Kupa Beşlisi | "dökülene bakıyor" | "kalanı kullanmaya korkuyor" |
+
+**gözlenebilir_işaretler:**
+- fiil zamanı ağırlığı: geçmiş zaman vs gelecek/şart kipi
+- "keşke" vs "ya ... olursa"
+- örnek verirken hangi zamandan örnek seçtiği
+
+**yalanlayan_kanıt:**
+- şimdiki zamanda somut bir durum tarif etmesi (iki kutbu da zayıflatır → dormant)
+- geçmişi kapanmış olarak anlatabilmesi
+
+---
+
+### 6. `arzuya_izin` — suçluluk ↔ meşruiyet
+**domainler:** aşk, benlik
+
+| kart | suçluluk | meşruiyet |
+|---|---|---|
+| Şeytan | "bağımlılık, tuzak" | "arzunun kabulü, canlılık" |
+| Kupa Yedilisi | "boş hayal, yanılsama" | "istemenin meşruluğu" |
+| İmparatoriçe | "aşırılık, kendini kaptırma" | "haz ve bereket" |
+| Değnek Ası | "kontrolsüz dürtü" | "ham arzu, kıvılcım" |
+
+**gözlenebilir_işaretler:**
+- istediğini söylerken gerekçelendirme ihtiyacı ("bencillik mi bilmiyorum ama...")
+- haz/istek kelimelerinin yanına eklenen özürler
+- kendi isteğini başkasının ihtiyacı üzerinden anlatması
+
+**yalanlayan_kanıt:**
+- bir isteği gerekçesiz ifade etmesi
+- kendi keyfi için yaptığı bir şeyi savunmaya geçmeden anlatması
+
+---
+
+### 7. `otoriteyle_ilişki` — boyun eğen ↔ karşı duran
+**domainler:** kariyer, aile
+
+| kart | boyun eğen | karşı duran |
+|---|---|---|
+| İmparator | "koruyucu yapı" | "baskıcı katılık" |
+| Başrahip | "gelenek, rehberlik" | "dogma, kısıtlama" |
+| Kılıç Kralı | "berrak akıl, hakem" | "soğuk yargı, eleştiri" |
+| Adalet | "kurala güven" | "kuralın adaletsizliği" |
+
+**gözlenebilir_işaretler:**
+- kural / patron / aile beklentisinden bahsederken ton: sığınma mı sürtünme mi
+- "gerekiyor / lazım" sıklığı vs "saçma / anlamsız"
+- tavsiye isterken onay mı yoksa izin mi arıyor
+
+**yalanlayan_kanıt:**
+- bir otoriteye hem uyup hem onu eleştirebilmesi (ikisini de zayıflatır)
+- bir kuralı kendi gerekçesiyle seçtiğini söylemesi
+
+---
+
+### Aday (kesinleşmedi): `içsel_sese_güven` — kendi sezgisi ↔ dış onay
+Kartlar: Ay ("yanılsama, korku" | "sezgi, rehberlik"), Başrahibe ("içeriden bilmek" |
+"bilinmeyene teslim"), Kılıç Yedilisi ("kendi yolunu çizmek" | "gizleme, kaçamak").
+
+**Sorun:** `otoriteyle_ilişki` ile örtüşme riski yüksek. "Dış onay arayan" ile
+"boyun eğen" pratikte ayrışıyor mu? Ayrışmıyorsa bu eksen düşer. Karar tarot
+pratiğine ait.
+
+---
+
+## 15. Orçun'un review protokolü
+
+§14 için, her eksende sırayla şu dört soru:
+
+1. **Kartlar gerçekten böyle mi dönüyor?** Tablodaki her satır için: "bu kişiyi
+   bilseydim bu kartı gerçekten böyle okur muydum?" Hayırsa satırı işaretle.
+2. **Kutup adları doğru mu?** İsimler pratikte kullandığın ayrımı yakalıyor mu,
+   yoksa daha iyi bir adlandırma var mı?
+3. **Fazlalık var mı?** İki eksen aynı şeyi mi ölçüyor? (özellikle 7 ↔ aday eksen)
+4. **Ne eksik?** Kartları ayırdığını bildiğin ama listede olmayan bir kişi özelliği?
+   Özellikle **süit/element** geleneğinden gelen bir eksen bekliyorum ve bulamadım.
+
+Ek olarak, dokunulmaması gereken iki kısıt:
+- Eksen sayısı **5–8** arasında kalmalı (§3 *Testler*).
+- Her eksen **≥3 kartı** çevirmeli; 1–2 kart çeviren şey eksen değil, detaydır.
+
+`gözlenebilir_işaretler` ve `yalanlayan_kanıt` alanlarını benim doldurmam yeterli
+(psikodilbilimsel taraf), ama **tablodaki kart okumaları senin alanın** — orada
+yanılmışsam tüm mimari yanlış temele oturur.
