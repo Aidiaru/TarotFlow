@@ -278,7 +278,7 @@ yeniden üret. Okuma değişmiyorsa Barnum'dur, profil iş yapmıyordur.
 
 ## 7. Kart bilgisi: RAG değil, sense tablosu
 
-78 kart × rakip anlamlar = statik tablo. Yalnızca çekilen kartların satırları
+78 kart × aday anlamlar = statik tablo. Yalnızca çekilen kartların satırları
 enjekte edilir.
 
 ### Bir kartın kaç anlamı olur? (sık karışan nokta)
@@ -301,7 +301,7 @@ zorunda. Kısıt yalnızca ikincisinde.
 Aynı veri iki işe yarar:
 
 1. **Türetme anında (offline, bir kez):** §3'teki egzersizin 1. ve 2. adımı
-   (kart al → rakip anlamlarını yaz) tam olarak bu tablodur. Yani tablo,
+   (kart al → aday anlamlarını yaz) tam olarak bu tablodur. Yani tablo,
    eksenleri bulmanın **girdisidir**.
 2. **Çalışma anında:** eksenler netleşince her sense, kendisini seçen
    `eksen + kutup` ile etiketlenir. Nihai artefakt eksenlerle **anotasyonlu** tablodur:
@@ -456,7 +456,7 @@ seç; ürünün kendisi o ses.
 - **Eksen taslağı → Claude (YAPILDI, §14).** Kartlardan geriye türetildi.
 - **Eksen review → Orçun.** Tarot bakan biri; §15'teki protokolle taslağı
   onaylayacak/düzeltecek. Kart okumaları onun alanı, gözlenebilir işaretler Claude'un.
-- **78 kart × rakip anlamlar tablosu → Claude.** §3'teki türetme egzersizinin
+- **78 kart × aday anlamlar tablosu → Claude.** §3'teki türetme egzersizinin
   1. ve 2. adımını hazır vermek için. Düz kartlar (ters yok), Türkçe.
 - **Şema + migration'lar → Claude.** Eksen listesi kesinleştikten sonra.
   Write yetkisi var ama migration'lar yine de dosyaya yazılıp git'e girecek —
