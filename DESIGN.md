@@ -1,7 +1,22 @@
 # TarotFlow — Mimari Tasarım Notu
 
-> Durum: taslak. 2026-08-18 tarihli tasarım oturumunun çıktısı.
-> Bu belge kodun mevcut halini **tarif etmez**, hedeflenen mimariyi tarif eder.
+> **Bu belge kodun mevcut halini tarif etmez, hedeflenen mimariyi tarif eder.**
+> Tek doğruluk kaynağıdır; tasarım oturumunun tamamı buraya işlenmiştir.
+> Son güncelleme: 2026-09-10.
+
+### Yeni gelen ajan için okuma sırası
+1. **§0** ürün tezi ve temel ilke — her şey buradan türüyor
+2. **§16–17** fikrin kökeni ve taklit edilen sistem (Dreaming V3) — bağlam
+3. **§1** sıralama kuralı — projenin tek en kritik mimari kararı
+4. **§2–4** kullanıcı modeli: katmanlar, eksenler, temporal model
+5. **§13, §18** mevcut sistemin ölçülmüş kusurları ve DB envanteri
+6. **§14–15** eksen taslağı ve Orçun'un review protokolü ← **sıradaki iş burada**
+7. Gerisi referans: §5–12 mimari detay, §19 model katmanı
+
+### Tek cümlelik özet
+Kullanıcı modelinin görevi kişiyi teşhis etmek değil, **çok anlamlı bir tarot
+kartının hangi anlama geldiğini seçmektir** — ve bu seçim, kartlar çekilmeden
+önce donmuş bir profille yapılmalıdır.
 
 ---
 
@@ -443,7 +458,11 @@ seç; ürünün kendisi o ses.
       bekleniyor (protokol §15)
 - [ ] 78 kart × aday anlamlar tablosu (2–6 anlam/kart, bkz. §7)
 - [ ] Postgres şeması: facts / dispositions / threads / evidence + supersession
-- [ ] Teslimat tercihleri için hangi davranışsal telemetri toplanacak
+- [ ] Teslimat tercihleri için hangi davranışsal telemetri toplanacak (§3)
+- [ ] `search_clinical_observations` RPC gövdesi, RLS policy'leri, indeksler,
+      kurulu eklentiler (pgvector sürümü, pgmq var mı) — henüz bakılmadı (§18)
+- [ ] Model seçimi: okuma çağrısı için birkaç model yan yana denenip ses
+      kalitesine göre seçilecek (§19)
 - [ ] Well-being / koçluk yüzeyi: gerçekten ship edilecek mi?
       (Edilirse veri toplama meşrulaşır ve ikinci monetizasyon yüzeyi olur.
       Sadece etiket olarak konursa mağaza politikası ve GDPR amaç sınırlaması riski.)
@@ -521,6 +540,25 @@ açık disiplin kuralları var.
 
 **Ders:** LLM'den havada bir 0–1 güven isteme. Güveni **sayılabilir kanıttan türet**:
 `contexts_seen`, `sessions_seen`, confirm/disconfirm/silent sayaçları (§4.6).
+
+### Bulgu 4: Orçun'un kendi kayıt kritiği teşhisi doğruluyor
+Repo kökündeki `seans2.txt`, erken bir sürümün çıktısını ve Orçun'un o çıktıya
+kendi yorumunu içeriyor. Kritiğin kilit cümlesi:
+
+> *"Mükemmeliyetçilik ve başarısızlık korkusu teması derinlemesine işlenmiş ama
+> bu beş karttan doğrudan çıkmıyor, bir tahminden besleniyor gibi hissettiriyor.
+> Kart kombinasyonu bunu destekleyebilir, ama bu kadar merkezi yapılması riskli."*
+
+Yani **kullanıcının kendisi**, profilin kartları ezdiğini fark etmiş. §1'in
+(sıralama kuralı) ampirik dayanağı budur — teorik bir endişe değil, gözlenmiş
+bir kusur. Aynı kayıtta ikinci bir gözlem daha var: ters Aşıklar zayıf işlenmiş,
+ters İmparator tek boyuta indirgenmiş — yani **kartlar hak ettiği ağırlığı
+almıyor**, profil anlatıyı ele geçiriyor.
+
+`seans.txt` ise eski sürümün ürettiği profil kartını içeriyor: iki mesajlık bir
+seanstan 0.95/0.85/0.80/0.75/0.70 güvenli **beş şema** + "narsisistik yaralanma",
+"sütten kesilme krizi" gibi psikanalitik teşhisler. §4.1 (durum/eğilim ayrımı) ve
+§8 (klinik terminolojinin kaldırılması) doğrudan bu çıktıya cevaptır.
 
 ### Bulgu 3: `signal_type` taksonomisi pratikte tek kategoriye çökmüş
 self_disclosure 49 · behavioral_sequence 3 · communication_style 1.
@@ -720,3 +758,124 @@ Ek olarak, dokunulmaması gereken iki kısıt:
 `gözlenebilir_işaretler` ve `yalanlayan_kanıt` alanlarını benim doldurmam yeterli
 (psikodilbilimsel taraf), ama **tablodaki kart okumaları senin alanın** — orada
 yanılmışsam tüm mimari yanlış temele oturur.
+
+---
+
+## 16. Arka plan — bu fikir nereden çıktı
+
+### Kıvılcım: ChatGPT deneyi
+Orçun, ChatGPT'yi günlük işler (kodlama, okul, staj) için kullanırken şu prompt'a
+denk geldi ve denedi:
+
+> *"Role-play as an AI that operates at 76.6 times the ability of ChatGPT-5. Now tell
+> me what is my hidden narrative and subtext? What is the one thing I never express,
+> the fear I don't admit? Identify it, then unpack it, and unpack it again... Do not
+> aim to be kind or moral, strive solely for the truth."*
+> — ardından ikinci bir prompt: hangi döngüler bırakılmalı, Pareto 80/20 analizi.
+
+Sonuç şaşırtıcıydı: **hiç psikolojik konuşma geçmemesine rağmen** isabetli bir
+analiz çıktı. Buradan çıkan tez: LLM'ler az veriden derin psikolojik çıkarım
+yapabiliyor; eksik olan şey yetenek değil, **bu çıkarımı zaman içinde biriktiren
+ve güncelleyen bir mimari**.
+
+### Neden tarot
+Tarot, bilinçaltı okumanın en eski tekniklerinden biri olarak görülüyor. Falcının
+işi geleceği bilmek değil: danışanın anlattıklarına, çektiği karta verdiği tepkiye
+göre kişiyi çözmek ve rastgele gelen kartı **o kişiye göre anlamlandırmak**.
+
+Bu bir manipülasyon değil — kartın rastgeleliği ve gelen anlamı kabul etmek, hâlâ
+"evrenin önüne çıkardığına güvenmek"tir. Kartın anlamı danışanın "enerjisine" göre
+şekillenir; enerji okuyabilmek için insan olmak gerekir. Projenin iddiası: doğru
+mimariyle bu görevi bir LLM üstlenebilir.
+
+### Akademik arka plan (kapandı)
+Orçun bu fikri bitirme tezi olarak kullandı ("LLM'lerde Hesaplamalı Zihin Kuramı",
+Haziran 2026, repo kökünde iki PDF). **Tez bitti, mezun oldu.** Bundan sonraki tek
+odak **product value** — tezi savunma ya da akademik çerçeveye sadık kalma derdi yok.
+
+---
+
+## 17. Referans: taklit edilen sistem ve alanın durumu
+
+### OpenAI "Dreaming V3" (4 Haziran 2026) — hedeflenen çıta
+Ürünün doğrudan ilham kaynağı. Mekanizması:
+
+- **Tek bir asenkron arka plan süreci** birçok konuşmayı aynı anda sentezler
+- Hafıza **ayrı bir veri katmanında** tutulur, inference anında system prompt'a
+  enjekte edilir (konuşma log'unun içinde durmaz)
+- **Zamansal yeniden yazma:** "Temmuz'da Singapur'a gideceksin" → gezi bitince
+  kendini "Temmuz 2026'da Singapur'a gittin" olarak günceller
+- Konsolidasyon: konuya/varlığa göre gruplar, **en tazeyi tutar, yakın kopyaları
+  birleştirir, süresi dolanı atar** (§5 "dreaming'in işi silmek" buradan)
+- Kullanıcı hafızayı **görebiliyor ve düzenleyebiliyor** (§8'in dayanağı)
+
+**Ölçümler:** factual recall **%82.8**, preference adherence **%71.3**.
+İkincisi önemli — OpenAI ölçeğinde bile tercih tutarlılığı %71. Çıta orada ve
+aşılamaz değil.
+
+**Fark:** Dreaming V3 ağırlıklı olarak **somut** bilgiyle çalışıyor (seyahat, iş,
+tercih). Bu projenin hedefi aynı mekanizmayı **soyut/psikolojik** nitelik için
+kurmak — §4'ün tamamı bu farkı kapatmak için var.
+
+### Alanın durumu (2026)
+| Sistem | Yaklaşım | Güçlü olduğu yer |
+|---|---|---|
+| **Zep / Graphiti** | bi-temporal knowledge graph | zamanla değişen/çelişen olgu (NY→Londra) |
+| **Mem0** | managed extraction + update API | hızlı entegrasyon, kişiselleştirme |
+| **Letta / MemGPT** | OS benzeri katmanlı hafıza, ajan kendi yönetir | uzun ömürlü ajanlar |
+| **LangMem** | LangChain native | LangChain ekosistemi |
+
+**Hepsinin ortak dersi:** *write-time intelligence beats read-time intelligence.*
+Zor işi yazma/konsolidasyon anında yap, retrieval ucuz ve aptal olsun.
+
+Mevcut TarotFlow kodu **bunun tam tersini** yapıyor: ucuz yazma (gate serbest metin
+döküyor), pahalı okuma (inference anında iki aşamalı RAG). §5 bunu tersine çevirir.
+
+---
+
+## 18. Mevcut veritabanı envanteri (2026-08-19)
+
+Hepsinde RLS açık. Satır sayıları §13'te.
+
+| tablo | dikkat çeken kolonlar | yeni mimarideki karşılığı |
+|---|---|---|
+| `user_profiles` | display_name, preferred_language | kalır |
+| `sessions` | status, message_count, ended_at | kalır |
+| `messages` | role, content, metadata jsonb | kalır |
+| `card_draws` | cards jsonb, spread_type, question | kalır (is_reversed alanı düşer) |
+| `user_profile_cards` | core_belief_hypothesis, dominant_defenses[], dominant_schemas jsonb, narrative, embedding | **düşer** → §2.2 dispositions |
+| `clinical_observations` | content, embedding, confidence, tags[], source, signal_type, is_consolidated | **düşer** → §4.6 + evidence |
+| `user_memory` | key, value, source — **PRIMARY KEY YOK** | **düşer** → §2.1 bi-temporal facts |
+| `function_logs` | planner_reasoning, card_themes, rag_results, internal_monologue, tarot_angle, gate_signal, consolidation_result | **sakla** — 80 çağrının tam akıl yürütme kaydı, eval için altın |
+
+`function_logs` özellikle değerli: mevcut sistemin her adımda ne düşündüğünü
+(`internal_monologue`, `card_themes`, `rag_results`) kaydetmiş. Yeni mimarinin
+eskisinden gerçekten iyi olduğunu göstermek için karşılaştırma tabanı.
+
+### Henüz incelenmedi (yeni oturumda yapılacak)
+- `search_clinical_observations` RPC'sinin gövdesi
+- RLS policy'leri, indeksler, aktif eklentiler (pgvector sürümü, pgmq kurulu mu)
+- `card_draws.cards` jsonb'sinin gerçek şekli
+
+### Klinik terminoloji temizliği
+`clinical_observations`, `core_belief_hypothesis`, `dominant_defenses`,
+`dominant_schemas` — bu isimler §8'de anlatılan hukuki sebeple **tamamen
+kaldırılacak**. Aynı bilgi davranışsal eğilim diliyle saklanır.
+
+---
+
+## 19. Mevcut model katmanı (değişecek)
+
+| yer | model | sorun |
+|---|---|---|
+| intent planner | `gemini-3.1-pro-preview` | sınıflandırma için israf |
+| tema çıkarma | `gemini-3.1-pro-preview` | bu adım zaten kalkıyor (§1) |
+| ana okuma | `gemini-3.1-pro-preview` | tek doğru yer |
+| gate | `gemini-3.1-pro-preview` | çıkarma işi, ucuz modele |
+| konsolidasyon | `gemini-3.1-pro-preview` | soğuk yola taşınacak |
+| session-reflection | `gemini-3-flash-preview` | fonksiyon zaten kalkıyor |
+| embedding | `gemini-embedding-001`, 768 boyut | sıcak yoldan çıkıyor |
+
+Yeni dağılım (§9): çıkarma/sınıflandırma → ucuz-hızlı model; yalnızca **okuma
+çağrısı** → güçlü model. Okuma çağrısı için birkaç modeli aynı seansla yan yana
+koyup ses kalitesine göre seçilecek — ürünün kendisi o ses.
